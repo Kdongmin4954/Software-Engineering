@@ -1,0 +1,3893 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="dongne-api" content="static-preview" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>동네마켓 - 가까운 이웃과 가벼운 거래</title>
+
+  <!-- Google Fonts: Noto Sans KR -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700&display=swap" rel="stylesheet" />
+
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+
+  <!-- Figma Design Tokens -->
+  <style>
+    :root {
+      --primary: #1D7B58;
+      --primary-hover: #166346;
+      --primary-soft: #E7F3EC;
+      --surface-muted: #F1F5F2;
+      --ink: #18231E;
+      --muted: #637168;
+      --border: #E4EAE6;
+      --input-border: #D6DFD9;
+      --warn-bg: #FFF5D9;
+      --warn-text: #80682D;
+      --reserved-bg: #FFF0B6;
+      --reserved-text: #795900;
+      --icon-inactive: #95A19A;
+      --outer-bg: #F4F7F5;
+      --danger: #D9383A;
+      --danger-hover: #B92B2D;
+      --danger-soft: #FDF0F0;
+    }
+
+    * {
+      box-sizing: border-box;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    body {
+      font-family: 'Noto Sans KR', -apple-system, BlinkMacSystemFont, sans-serif;
+      background-color: var(--outer-bg);
+      color: var(--ink);
+      margin: 0;
+      padding: 0;
+    }
+
+    #app { position: relative; }
+    #modal-root[hidden], #chat-nav-badge[hidden] { display: none; }
+    #modal-root {
+      background: rgba(24, 35, 30, .4);
+      position: absolute;
+      inset: 0;
+      z-index: 40;
+      display: flex;
+      align-items: flex-end;
+      justify-content: center;
+    }
+    #modal-root > [role="dialog"] {
+      background: white;
+      color: var(--ink);
+      width: 100%;
+      max-width: 390px;
+      max-height: calc(100% - 16px);
+      overflow-y: auto;
+    }
+    #toast-root {
+      position: absolute;
+      inset: auto 16px 80px;
+      z-index: 50;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 8px;
+      pointer-events: none;
+    }
+    .toast-message {
+      background: var(--ink);
+      color: white;
+      border-radius: 999px;
+      padding: 10px 16px;
+      overflow-wrap: anywhere;
+    }
+    .toast-message[data-type="error"] { background: #B91C1C; }
+
+    @keyframes gpsPulse {
+      0% { transform: scale(0.88); opacity: 0.55; }
+      70% { transform: scale(1.24); opacity: 0.08; }
+      100% { transform: scale(0.88); opacity: 0.55; }
+    }
+
+    .gps-pulse {
+      transform-origin: 177px 136px;
+      animation: gpsPulse 2.2s ease-in-out infinite;
+    }
+
+    .no-scrollbar::-webkit-scrollbar {
+      display: none;
+    }
+    .no-scrollbar {
+      -ms-overflow-style: none;
+      scrollbar-width: none;
+    }
+  </style>
+
+  <script>
+    if (window.tailwind) tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['"Noto Sans KR"', '-apple-system', 'BlinkMacSystemFont', 'sans-serif'],
+          },
+          colors: {
+            primary: 'var(--primary)',
+            'primary-hover': 'var(--primary-hover)',
+            'primary-soft': 'var(--primary-soft)',
+            'surface-muted': 'var(--surface-muted)',
+            ink: 'var(--ink)',
+            muted: 'var(--muted)',
+            border: 'var(--border)',
+            'input-border': 'var(--input-border)',
+            'warn-bg': 'var(--warn-bg)',
+            'warn-text': 'var(--warn-text)',
+            'reserved-bg': 'var(--reserved-bg)',
+            'reserved-text': 'var(--reserved-text)',
+            'icon-inactive': 'var(--icon-inactive)',
+            'outer-bg': 'var(--outer-bg)',
+            danger: 'var(--danger)',
+            'danger-hover': 'var(--danger-hover)',
+            'danger-soft': 'var(--danger-soft)',
+          },
+        },
+      },
+    };
+  </script>
+</head>
+<body class="bg-outer-bg text-ink antialiased">
+  <!-- Mobile Web App Frame (Responsive Flex/Grid, max-width 390px centered on desktop, 100dvh) -->
+  <div class="min-h-[100dvh] w-full flex justify-center sm:items-center sm:p-4">
+    <div
+      id="app"
+      class="w-full max-w-[390px] h-[100dvh] sm:h-[844px] sm:max-h-[calc(100dvh-2rem)] bg-white sm:rounded-[24px] sm:shadow-[0_18px_48px_rgba(24,35,30,0.09)] sm:border sm:border-border flex flex-col overflow-hidden relative"
+    >
+      <!-- Active Screen Root -->
+      <main id="screen-root" class="flex-1 flex flex-col min-h-0 overflow-hidden"></main>
+
+      <!-- Fixed 4-Tab Bottom Navigation -->
+      <nav id="bottom-nav" class="hidden flex-none bg-white border-t border-border px-2 pt-2 pb-2.5"></nav>
+
+      <!-- Custom Bottom Sheet / Modal Layer (no alert/confirm) -->
+      <div
+        id="modal-root"
+        hidden
+        class="fixed sm:absolute inset-0 z-40"
+      ></div>
+
+      <!-- Toast Feedback Layer -->
+      <div
+        id="toast-root"
+        role="status"
+        class="pointer-events-none fixed sm:absolute inset-x-4 bottom-20 z-50 flex flex-col items-center gap-2"
+      ></div>
+    </div>
+  </div>
+
+  <script>
+    /* =========================================================================
+       1. ENVIRONMENT & API CONNECTION CONFIG
+       ========================================================================= */
+    const IS_LOCAL =
+      location.protocol === "file:" ||
+      location.hostname === "127.0.0.1" ||
+      location.hostname === "localhost";
+    const IS_SERVED_FROM_BACKEND = document.querySelector('meta[name="dongne-api"]').content === "fastapi";
+
+    const API_BASE = IS_SERVED_FROM_BACKEND ? location.origin : "http://127.0.0.1:8000";
+    const WS_BASE = IS_SERVED_FROM_BACKEND
+      ? `${location.protocol === "https:" ? "wss:" : "ws:"}//${location.host}`
+      : "ws://127.0.0.1:8000";
+
+    let USE_MOCK = !IS_SERVED_FROM_BACKEND && !IS_LOCAL;
+
+    const SESSION_KEY = "dongne_user";
+    const DRAFT_KEY = "dongne_post_draft_v2";
+
+    /* =========================================================================
+       2. SVG PLACEHOLDERS & IMAGE RENDERING HELPERS
+       ========================================================================= */
+    const PLACEHOLDER_SVGS = {
+      lamp: `
+        <svg viewBox="0 0 160 160" class="w-full h-full" xmlns="http://www.w3.org/2000/svg">
+          <rect width="160" height="160" fill="#ECE8E0"/>
+          <rect x="0" y="116" width="160" height="44" fill="#CCB69A"/>
+          <ellipse cx="80" cy="126" rx="22" ry="5.5" fill="#A98F72" opacity="0.45"/>
+          <rect x="74" y="72" width="12" height="50" rx="4" fill="#F4F1EA"/>
+          <path d="M42 76 C42 44, 118 44, 118 76 Z" fill="#FAF8F4"/>
+          <ellipse cx="80" cy="76" rx="38" ry="5" fill="#E3DDD2"/>
+        </svg>`,
+      chair: `
+        <svg viewBox="0 0 160 160" class="w-full h-full" xmlns="http://www.w3.org/2000/svg">
+          <rect width="160" height="160" fill="#F0EDE7"/>
+          <rect x="0" y="120" width="160" height="40" fill="#DFD7CA"/>
+          <path d="M56 88 C52 44, 108 44, 104 88" fill="none" stroke="#9B7247" stroke-width="6" stroke-linecap="round"/>
+          <ellipse cx="80" cy="92" rx="30" ry="9" fill="#C79E6E"/>
+          <line x1="58" y1="96" x2="52" y2="134" stroke="#8C6239" stroke-width="5" stroke-linecap="round"/>
+          <line x1="102" y1="96" x2="108" y2="134" stroke="#8C6239" stroke-width="5" stroke-linecap="round"/>
+        </svg>`,
+      camera: `
+        <svg viewBox="0 0 160 160" class="w-full h-full" xmlns="http://www.w3.org/2000/svg">
+          <rect width="160" height="160" fill="#ECEAE4"/>
+          <polygon points="0,96 160,76 160,160 0,160" fill="#DED8CE"/>
+          <rect x="34" y="64" width="92" height="50" rx="8" fill="#18231E"/>
+          <rect x="34" y="62" width="92" height="15" rx="6" fill="#D5DAD8"/>
+          <circle cx="80" cy="90" r="20" fill="#3B423E" stroke="#D5DAD8" stroke-width="3"/>
+          <circle cx="80" cy="90" r="11" fill="#18231E"/>
+          <circle cx="76" cy="86" r="2.5" fill="#FFFFFF" opacity="0.7"/>
+        </svg>`,
+      headphone: `
+        <svg viewBox="0 0 160 160" class="w-full h-full" xmlns="http://www.w3.org/2000/svg">
+          <rect width="160" height="160" fill="#F1EFEA"/>
+          <rect x="0" y="100" width="160" height="60" fill="#E6E0D7"/>
+          <path d="M46 96 C42 46, 118 46, 114 96" fill="none" stroke="#D6D0C4" stroke-width="10" stroke-linecap="round"/>
+          <rect x="36" y="88" width="22" height="34" rx="11" fill="#E3DDD1" stroke="#CCC5B6" stroke-width="2"/>
+          <rect x="102" y="88" width="22" height="34" rx="11" fill="#E3DDD1" stroke="#CCC5B6" stroke-width="2"/>
+        </svg>`,
+      default: `
+        <svg viewBox="0 0 160 160" class="w-full h-full" xmlns="http://www.w3.org/2000/svg">
+          <rect width="160" height="160" fill="#E7F3EC"/>
+          <rect x="44" y="48" width="72" height="62" rx="12" fill="#FFFFFF" stroke="#BDDCC9" stroke-width="2.5"/>
+          <circle cx="67" cy="70" r="7" fill="#1D7B58" opacity="0.25"/>
+          <path d="M48 102 L72 78 L90 94 L102 82 L114 102" fill="none" stroke="#1D7B58" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>`,
+    };
+
+    window.handleImgFallback = function (imgEl, key) {
+      const box = imgEl.parentElement;
+      if (!box) return;
+      box.innerHTML = PLACEHOLDER_SVGS[key] || PLACEHOLDER_SVGS.default;
+    };
+
+    function renderImageBox(src, alt = "상품 이미지", fallbackKey = "default") {
+      if (!src || typeof src !== "string") {
+        return `<div class="w-full h-full bg-surface-muted flex items-center justify-center overflow-hidden">${PLACEHOLDER_SVGS[fallbackKey] || PLACEHOLDER_SVGS.default}</div>`;
+      }
+      if (src.startsWith("svg:")) {
+        const key = src.slice(4);
+        return `<div class="w-full h-full bg-surface-muted flex items-center justify-center overflow-hidden">${PLACEHOLDER_SVGS[key] || PLACEHOLDER_SVGS.default}</div>`;
+      }
+      return `
+        <div class="w-full h-full bg-surface-muted overflow-hidden">
+          <img
+            src="${escapeHtml(src)}"
+            alt="${escapeHtml(alt)}"
+            loading="lazy"
+            class="w-full h-full object-cover"
+            onerror="window.handleImgFallback(this, '${escapeHtml(fallbackKey)}')"
+          />
+        </div>
+      `;
+    }
+
+    /**
+     * Resize & compress local image File via HTML5 Canvas (max 640px, JPEG 0.75)
+     */
+    function compressImageToDataUrl(file, maxSize = 640, quality = 0.75) {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onerror = () => reject(new Error("이미지 파일을 읽을 수 없습니다."));
+        reader.onload = () => {
+          const img = new Image();
+          img.onerror = () => reject(new Error("지원하지 않는 이미지 형식입니다."));
+          img.onload = () => {
+            let { width, height } = img;
+            if (width > maxSize || height > maxSize) {
+              if (width >= height) {
+                height = Math.round((height * maxSize) / width);
+                width = maxSize;
+              } else {
+                width = Math.round((width * maxSize) / height);
+                height = maxSize;
+              }
+            }
+            const canvas = document.createElement("canvas");
+            canvas.width = width;
+            canvas.height = height;
+            const ctx = canvas.getContext("2d");
+            ctx.fillStyle = "#FFFFFF";
+            ctx.fillRect(0, 0, width, height);
+            ctx.drawImage(img, 0, 0, width, height);
+            resolve(canvas.toDataURL("image/jpeg", quality));
+          };
+          img.src = reader.result;
+        };
+        reader.readAsDataURL(file);
+      });
+    }
+
+    /* =========================================================================
+       3. DEMO (MOCK) DATABASE MATCHING 10-TABLE FASTAPI CONTRACT 100%
+       ========================================================================= */
+    const nowTs = Date.now();
+    const agoIso = (mins) => new Date(nowTs - mins * 60000).toISOString();
+    const futureIso = (hoursFromNow) => {
+      const d = new Date(nowTs + hoursFromNow * 3600000);
+      d.setMinutes(0, 0, 0);
+      return d.toISOString();
+    };
+
+    const mockDB = {
+      users: [
+        { user_id: 1, nickname: "연남이", phone_num: "010-1234-5678", password: "1234" },
+        { user_id: 2, nickname: "모서리", phone_num: "010-2222-3333", password: "1234" },
+        { user_id: 3, nickname: "나무그늘", phone_num: "010-3333-4444", password: "1234" },
+        { user_id: 4, nickname: "필름산책", phone_num: "010-4444-5555", password: "1234" },
+        { user_id: 5, nickname: "소리상점", phone_num: "010-5555-6666", password: "1234" },
+      ],
+      neighborhoods: [
+        { neighborhood_id: 1, neighborhood_name: "연남동", region_info: "서울 마포구 연남동" },
+        { neighborhood_id: 2, neighborhood_name: "성수동", region_info: "서울 성동구 성수동" },
+        { neighborhood_id: 3, neighborhood_name: "연향동", region_info: "전남 순천시 연향동" },
+      ],
+      user_neighborhood: [
+        { verification_id: 1, verified_at: agoIso(400), verification_status: "인증완료", user_id: 1, neighborhood_id: 1 },
+        { verification_id: 2, verified_at: agoIso(500), verification_status: "인증완료", user_id: 2, neighborhood_id: 1 },
+        { verification_id: 3, verified_at: agoIso(480), verification_status: "인증완료", user_id: 3, neighborhood_id: 1 },
+        { verification_id: 4, verified_at: agoIso(460), verification_status: "인증완료", user_id: 4, neighborhood_id: 1 },
+        { verification_id: 5, verified_at: agoIso(440), verification_status: "인증완료", user_id: 5, neighborhood_id: 1 },
+      ],
+      product_post: [
+        {
+          post_id: 1,
+          post_title: "루이스폴센 판텔라 포터블 조명",
+          description: "작년 가을에 구매해 책상 위에서만 사용했어요. 충전 케이블과 박스 함께 드려요. 연남동에서 직접 만나 거래하고 싶어요.",
+          price: 120000,
+          status: "판매중",
+          post_created: agoIso(12),
+          user_id: 2,
+          neighborhood_id: 1,
+        },
+        {
+          post_id: 2,
+          post_title: "라탄 원목 의자, 내추럴 컬러",
+          description: "거실 포인트 체어로 두었던 원목 의자예요. 흔들림 없고 상태 아주 좋습니다.",
+          price: 35000,
+          status: "예약중",
+          post_created: agoIso(34),
+          user_id: 3,
+          neighborhood_id: 1,
+        },
+        {
+          post_id: 3,
+          post_title: "올림푸스 OM-1 필름카메라",
+          description: "노출계 정상 작동하고 뷰파인더 깔끔합니다. 스트랩과 렌즈캡 같이 드려요.",
+          price: 85000,
+          status: "판매중",
+          post_created: agoIso(75),
+          user_id: 4,
+          neighborhood_id: 1,
+        },
+        {
+          post_id: 4,
+          post_title: "소니 무선 헤드폰 WH-1000XM5",
+          description: "실내에서만 가볍게 착용해서 패드 상태 깨끗합니다. 정품 케이스 포함입니다.",
+          price: 245000,
+          status: "거래완료",
+          post_created: agoIso(210),
+          user_id: 5,
+          neighborhood_id: 1,
+        },
+        {
+          post_id: 5,
+          post_title: "성수동 감성 원목 사이드 테이블",
+          description: "원룸 정리하면서 내놓습니다. 성수동 직거래 원해요.",
+          price: 42000,
+          status: "판매중",
+          post_created: agoIso(50),
+          user_id: 2,
+          neighborhood_id: 2,
+        },
+        {
+          post_id: 6,
+          post_title: "아이패드 에어 5세대 64GB Wi-Fi",
+          description: "강의 필기용으로만 사용했습니다. 순천 연향동 직거래 가능합니다.",
+          price: 530000,
+          status: "판매중",
+          post_created: agoIso(95),
+          user_id: 3,
+          neighborhood_id: 3,
+        },
+      ],
+      product_image: [
+        { image_id: 1, image_url: "svg:lamp", post_id: 1 },
+        { image_id: 2, image_url: "svg:chair", post_id: 2 },
+        { image_id: 3, image_url: "svg:camera", post_id: 3 },
+        { image_id: 4, image_url: "svg:headphone", post_id: 4 },
+        { image_id: 5, image_url: "svg:chair", post_id: 5 },
+        { image_id: 6, image_url: "svg:default", post_id: 6 },
+      ],
+      wishlist: [
+        { wishlist_id: 1, created_at: agoIso(10), user_id: 1, post_id: 1 },
+        { wishlist_id: 2, created_at: agoIso(22), user_id: 1, post_id: 2 },
+        { wishlist_id: 3, created_at: agoIso(40), user_id: 1, post_id: 3 },
+        { wishlist_id: 4, created_at: agoIso(80), user_id: 1, post_id: 4 },
+        { wishlist_id: 5, created_at: agoIso(9), user_id: 3, post_id: 1 },
+        { wishlist_id: 6, created_at: agoIso(8), user_id: 4, post_id: 1 },
+      ],
+      chatroom: [
+        { chatroom_id: 1, chat_created: agoIso(60), post_id: 1 },
+        { chatroom_id: 2, chat_created: agoIso(120), post_id: 2 },
+        { chatroom_id: 3, chat_created: agoIso(1440), post_id: 3 },
+      ],
+      chat_participant: [
+        { participant_id: 1, user_id: 2, chatroom_id: 1 },
+        { participant_id: 2, user_id: 1, chatroom_id: 1 },
+        { participant_id: 3, user_id: 3, chatroom_id: 2 },
+        { participant_id: 4, user_id: 1, chatroom_id: 2 },
+        { participant_id: 5, user_id: 4, chatroom_id: 3 },
+        { participant_id: 6, user_id: 1, chatroom_id: 3 },
+      ],
+      chat_message: [
+        { message_id: 1, content: "안녕하세요! 판텔라 조명 아직 구매할 수 있을까요?", sent_at: agoIso(25), chatroom_id: 1, user_id: 1 },
+        { message_id: 2, content: "네, 아직 판매중이에요 :)\n케이블이랑 박스도 같이 드려요.", sent_at: agoIso(24), chatroom_id: 1, user_id: 2 },
+        { message_id: 3, content: "좋아요! 오늘 저녁 7시에 연남동에서 뵐 수 있을까요?", sent_at: agoIso(22), chatroom_id: 1, user_id: 1 },
+        { message_id: 4, content: "네, 아직 판매 중이에요.", sent_at: agoIso(80), chatroom_id: 2, user_id: 3 },
+        { message_id: 5, content: "사진 더 보내드릴게요.", sent_at: agoIso(1400), chatroom_id: 3, user_id: 4 },
+      ],
+      reservation_info: [
+        {
+          reservation_id: 1,
+          reservation_at: futureIso(5),
+          reservation_status: "예약대기",
+          canceled_at: null,
+          post_id: 1,
+          user_id: 1,
+        },
+        {
+          reservation_id: 2,
+          reservation_at: futureIso(24),
+          reservation_status: "예약확정",
+          canceled_at: null,
+          post_id: 2,
+          user_id: 1,
+        },
+      ],
+    };
+
+    function mockGetUserProfile(user_id) {
+      const u = mockDB.users.find((item) => item.user_id === Number(user_id));
+      if (!u) throw new Error("존재하지 않는 회원입니다.");
+      const vers = mockDB.user_neighborhood
+        .filter((v) => v.user_id === u.user_id)
+        .sort((a, b) => new Date(b.verified_at) - new Date(a.verified_at));
+      const latest = vers[0] || null;
+      const nb = latest
+        ? mockDB.neighborhoods.find((n) => n.neighborhood_id === latest.neighborhood_id)
+        : null;
+      return {
+        user_id: u.user_id,
+        nickname: u.nickname,
+        phone_num: u.phone_num,
+        neighborhood_id: latest ? latest.neighborhood_id : null,
+        neighborhood_name: nb ? nb.neighborhood_name : null,
+        region_info: nb ? nb.region_info : null,
+        is_verified: Boolean(latest && latest.verification_status === "인증완료"),
+      };
+    }
+
+    function mockEnrichPost(post, currentUserId = null) {
+      const seller = mockDB.users.find((u) => u.user_id === post.user_id);
+      const nb = mockDB.neighborhoods.find((n) => n.neighborhood_id === post.neighborhood_id);
+      const images = mockDB.product_image
+        .filter((img) => img.post_id === post.post_id)
+        .sort((a, b) => a.image_id - b.image_id)
+        .map((img) => img.image_url);
+      const wishes = mockDB.wishlist.filter((w) => w.post_id === post.post_id);
+      const chats = mockDB.chatroom.filter((c) => c.post_id === post.post_id);
+      return {
+        ...post,
+        seller_nickname: seller ? seller.nickname : "알 수 없음",
+        neighborhood_name: nb ? nb.neighborhood_name : "",
+        region_info: nb ? nb.region_info : "",
+        images,
+        thumbnail: images[0] || null,
+        wish_count: wishes.length,
+        chat_count: chats.length,
+        is_wished: currentUserId ? wishes.some((w) => w.user_id === Number(currentUserId)) : false,
+      };
+    }
+
+    /* =========================================================================
+       4. API SERVICE LAYER (1:1 MATCH WITH FASTAPI 10-TABLE ENDPOINTS)
+       ========================================================================= */
+    const MOCK_CHAT_KEY = "dongne_mock_chat_v1";
+    const MOCK_CHAT_TABLES = ["chatroom", "chat_participant", "chat_message", "reservation_info"];
+
+    function loadMockChats() {
+      const shared = JSON.parse(localStorage.getItem(MOCK_CHAT_KEY) || "null");
+      if (!shared) return;
+      for (const table of MOCK_CHAT_TABLES) mockDB[table] = shared[table];
+      for (const post of mockDB.product_post) {
+        if (shared.postStatuses[post.post_id]) post.status = shared.postStatuses[post.post_id];
+      }
+    }
+
+    function saveMockChats() {
+      const shared = Object.fromEntries(MOCK_CHAT_TABLES.map((table) => [table, mockDB[table]]));
+      shared.postStatuses = Object.fromEntries(mockDB.product_post.map((post) => [post.post_id, post.status]));
+      localStorage.setItem(MOCK_CHAT_KEY, JSON.stringify(shared));
+      refreshChats();
+    }
+
+    async function apiFetch(path, options = {}) {
+      try {
+        const res = await fetch(`${API_BASE}${path}`, {
+          ...options,
+          headers: { "Content-Type": "application/json", ...options.headers },
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          const error = new Error(typeof data.detail === "string" && data.detail.trim()
+            ? data.detail : `요청 처리에 실패했습니다. (HTTP ${res.status})`);
+          error.status = res.status;
+          throw error;
+        }
+        return data;
+      } catch (err) {
+        if (err instanceof TypeError || err.message === "Failed to fetch") {
+          throw new Error("백엔드 서버(127.0.0.1:8000)에 연결할 수 없어요. FastAPI 서버 실행 상태를 확인해 주세요.");
+        }
+        throw err;
+      }
+    }
+
+    const api = {
+      // 1. POST /api/signup
+      async signup({ phone_num, password, nickname }) {
+        if (!USE_MOCK) {
+          return apiFetch("/api/signup", {
+            method: "POST",
+            body: JSON.stringify({ phone_num, password, nickname }),
+          });
+        }
+        const cleaned = phone_num.trim();
+        if (mockDB.users.some((u) => u.phone_num === cleaned)) {
+          throw new Error("이미 가입된 전화번호입니다.");
+        }
+        const user_id = Math.max(0, ...mockDB.users.map((u) => u.user_id)) + 1;
+        mockDB.users.push({ user_id, phone_num: cleaned, password, nickname: nickname.trim() });
+        return { message: "회원가입 성공", user: mockGetUserProfile(user_id) };
+      },
+
+      // 2. POST /api/login
+      async login({ phone_num, password }) {
+        if (!USE_MOCK) {
+          return apiFetch("/api/login", {
+            method: "POST",
+            body: JSON.stringify({ phone_num, password }),
+          });
+        }
+        const found = mockDB.users.find(
+          (u) => u.phone_num === phone_num.trim() && u.password === password
+        );
+        if (!found) {
+          throw new Error("전화번호 또는 비밀번호가 올바르지 않습니다.");
+        }
+        return { message: "로그인 성공", user: mockGetUserProfile(found.user_id) };
+      },
+
+      // 3. GET /api/users/{user_id}
+      async getUser(user_id) {
+        if (!USE_MOCK) {
+          return apiFetch(`/api/users/${user_id}`);
+        }
+        return mockGetUserProfile(user_id);
+      },
+
+      // 4. GET /api/neighborhoods
+      async getNeighborhoods() {
+        if (!USE_MOCK) {
+          return apiFetch("/api/neighborhoods");
+        }
+        return [...mockDB.neighborhoods];
+      },
+
+      // 5. POST /api/verify-neighborhood
+      async verifyNeighborhood({ user_id, neighborhood_id }) {
+        if (!USE_MOCK) {
+          return apiFetch("/api/verify-neighborhood", {
+            method: "POST",
+            body: JSON.stringify({ user_id, neighborhood_id }),
+          });
+        }
+        const nb = mockDB.neighborhoods.find((n) => n.neighborhood_id === Number(neighborhood_id));
+        if (!nb) throw new Error("존재하지 않는 동네입니다.");
+        const verification = {
+          verification_id: Math.max(0, ...mockDB.user_neighborhood.map((v) => v.verification_id)) + 1,
+          verified_at: new Date().toISOString(),
+          verification_status: "인증완료",
+          user_id: Number(user_id),
+          neighborhood_id: nb.neighborhood_id,
+        };
+        mockDB.user_neighborhood.push(verification);
+        return {
+          message: `${nb.neighborhood_name} 동네 인증 완료`,
+          verification,
+          user: mockGetUserProfile(user_id),
+        };
+      },
+
+      // 6. GET /api/posts
+      async getPosts({ neighborhood_id, status, q, seller_id, user_id } = {}) {
+        if (!USE_MOCK) {
+          const params = new URLSearchParams();
+          if (neighborhood_id !== null && neighborhood_id !== undefined && neighborhood_id !== "") {
+            params.set("neighborhood_id", String(neighborhood_id));
+          }
+          if (status && status !== "전체") {
+            params.set("status", status);
+          }
+          if (q && q.trim()) {
+            params.set("q", q.trim());
+          }
+          if (seller_id !== null && seller_id !== undefined && seller_id !== "") {
+            params.set("seller_id", String(seller_id));
+          }
+          if (user_id !== null && user_id !== undefined && user_id !== "") {
+            params.set("user_id", String(user_id));
+          }
+          const qs = params.toString();
+          return apiFetch(`/api/posts${qs ? `?${qs}` : ""}`);
+        }
+        let rows = [...mockDB.product_post].sort(
+          (a, b) => new Date(b.post_created) - new Date(a.post_created)
+        );
+        if (neighborhood_id !== null && neighborhood_id !== undefined && neighborhood_id !== "") {
+          rows = rows.filter((p) => p.neighborhood_id === Number(neighborhood_id));
+        }
+        if (status && status !== "전체") {
+          rows = rows.filter((p) => p.status === status);
+        }
+        if (seller_id !== null && seller_id !== undefined && seller_id !== "") {
+          rows = rows.filter((p) => p.user_id === Number(seller_id));
+        }
+        if (q && q.trim()) {
+          const kw = q.trim().toLowerCase();
+          rows = rows.filter(
+            (p) =>
+              p.post_title.toLowerCase().includes(kw) ||
+              (p.description || "").toLowerCase().includes(kw)
+          );
+        }
+        return rows.map((p) => mockEnrichPost(p, user_id));
+      },
+
+      // 7. POST /api/posts
+      async createPost({ user_id, neighborhood_id, post_title, price, description, images }) {
+        if (!USE_MOCK) {
+          return apiFetch("/api/posts", {
+            method: "POST",
+            body: JSON.stringify({
+              user_id,
+              neighborhood_id,
+              post_title,
+              price,
+              description,
+              images: images || [],
+            }),
+          });
+        }
+        const post_id = Math.max(0, ...mockDB.product_post.map((p) => p.post_id)) + 1;
+        const created = {
+          post_id,
+          post_title: post_title.trim(),
+          description: description.trim(),
+          price: Number(price),
+          status: "판매중",
+          post_created: new Date().toISOString(),
+          user_id: Number(user_id),
+          neighborhood_id: Number(neighborhood_id),
+        };
+        mockDB.product_post.unshift(created);
+        (images || []).forEach((url) => {
+          const image_id = Math.max(0, ...mockDB.product_image.map((i) => i.image_id)) + 1;
+          mockDB.product_image.push({ image_id, image_url: url, post_id });
+        });
+        return { message: "게시글 등록 완료", post: mockEnrichPost(created, user_id) };
+      },
+
+      // 8. GET /api/posts/{post_id}?user_id=
+      async getPostDetail(post_id, user_id) {
+        if (!USE_MOCK) {
+          const qs = user_id ? `?user_id=${user_id}` : "";
+          return apiFetch(`/api/posts/${post_id}${qs}`);
+        }
+        const found = mockDB.product_post.find((p) => p.post_id === Number(post_id));
+        if (!found) throw new Error("게시글을 찾을 수 없습니다.");
+        return mockEnrichPost(found, user_id);
+      },
+
+      // 9. PATCH /api/posts/{post_id}/status
+      async updatePostStatus(post_id, status) {
+        if (!USE_MOCK) {
+          return apiFetch(`/api/posts/${post_id}/status`, {
+            method: "PATCH",
+            body: JSON.stringify({ status }),
+          });
+        }
+        loadMockChats();
+        const found = mockDB.product_post.find((p) => p.post_id === Number(post_id));
+        if (!found) throw new Error("게시글을 찾을 수 없습니다.");
+        found.status = status;
+        saveMockChats();
+        return { message: "상태 변경 완료", post: found };
+      },
+
+      // 9-1. DELETE /api/posts/{post_id}?user_id={user_id}
+      async deletePost(post_id, user_id) {
+        if (!USE_MOCK) {
+          return apiFetch(`/api/posts/${post_id}?user_id=${encodeURIComponent(user_id)}`, {
+            method: "DELETE",
+          });
+        }
+        loadMockChats();
+        const pid = Number(post_id);
+        const uid = Number(user_id);
+        const idx = mockDB.product_post.findIndex((p) => p.post_id === pid);
+        if (idx === -1) throw new Error("게시글을 찾을 수 없습니다.");
+        if (mockDB.product_post[idx].user_id !== uid) {
+          throw new Error("본인이 작성한 게시글만 삭제할 수 있습니다.");
+        }
+        mockDB.product_post.splice(idx, 1);
+        mockDB.product_image = mockDB.product_image.filter((img) => img.post_id !== pid);
+        mockDB.wishlist = mockDB.wishlist.filter((w) => w.post_id !== pid);
+        mockDB.reservation_info = mockDB.reservation_info.filter((r) => r.post_id !== pid);
+        const removedRoomIds = mockDB.chatroom
+          .filter((r) => r.post_id === pid)
+          .map((r) => r.chatroom_id);
+        mockDB.chatroom = mockDB.chatroom.filter((r) => r.post_id !== pid);
+        if (removedRoomIds.length > 0) {
+          mockDB.chat_participant = mockDB.chat_participant.filter(
+            (p) => !removedRoomIds.includes(p.chatroom_id)
+          );
+          mockDB.chat_message = mockDB.chat_message.filter(
+            (m) => !removedRoomIds.includes(m.chatroom_id)
+          );
+        }
+        saveMockChats();
+        return { message: "게시글 삭제 완료", post_id: pid };
+      },
+
+      // 10. GET /api/wishlist/{user_id}
+      async getWishlist(user_id) {
+        if (!USE_MOCK) {
+          return apiFetch(`/api/wishlist/${user_id}`);
+        }
+        const myWishes = mockDB.wishlist
+          .filter((w) => w.user_id === Number(user_id))
+          .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+        return myWishes
+          .map((w) => {
+            const p = mockDB.product_post.find((item) => item.post_id === w.post_id);
+            return p ? mockEnrichPost(p, user_id) : null;
+          })
+          .filter(Boolean);
+      },
+
+      // 11. POST /api/wishlist/toggle
+      async toggleWishlist({ user_id, post_id }) {
+        if (!USE_MOCK) {
+          return apiFetch("/api/wishlist/toggle", {
+            method: "POST",
+            body: JSON.stringify({ user_id, post_id }),
+          });
+        }
+        const idx = mockDB.wishlist.findIndex(
+          (w) => w.user_id === Number(user_id) && w.post_id === Number(post_id)
+        );
+        let wished = false;
+        if (idx >= 0) {
+          mockDB.wishlist.splice(idx, 1);
+          wished = false;
+        } else {
+          const wishlist_id = Math.max(0, ...mockDB.wishlist.map((w) => w.wishlist_id)) + 1;
+          mockDB.wishlist.push({
+            wishlist_id,
+            created_at: new Date().toISOString(),
+            user_id: Number(user_id),
+            post_id: Number(post_id),
+          });
+          wished = true;
+        }
+        const wish_count = mockDB.wishlist.filter((w) => w.post_id === Number(post_id)).length;
+        return { wished, wish_count };
+      },
+
+      // 12. POST /api/reservations
+      async createReservation({ post_id, user_id, reservation_at }) {
+        if (!USE_MOCK) {
+          return apiFetch("/api/reservations", {
+            method: "POST",
+            body: JSON.stringify({ post_id, user_id, reservation_at }),
+          });
+        }
+        loadMockChats();
+        const reservation_id = Math.max(0, ...mockDB.reservation_info.map((r) => r.reservation_id)) + 1;
+        const reservation = {
+          reservation_id,
+          reservation_at: reservation_at || new Date().toISOString(),
+          reservation_status: "예약대기",
+          canceled_at: null,
+          post_id: Number(post_id),
+          user_id: Number(user_id),
+        };
+        mockDB.reservation_info.push(reservation);
+        saveMockChats();
+        return { message: "예약 제안 완료", reservation };
+      },
+
+      // 13. PATCH /api/reservations/{reservation_id}
+      async updateReservation(reservation_id, reservation_status) {
+        if (!USE_MOCK) {
+          return apiFetch(`/api/reservations/${reservation_id}`, {
+            method: "PATCH",
+            body: JSON.stringify({ reservation_status }),
+          });
+        }
+        loadMockChats();
+        const target = mockDB.reservation_info.find(
+          (r) => r.reservation_id === Number(reservation_id)
+        );
+        if (!target) throw new Error("예약 정보를 찾을 수 없습니다.");
+        target.reservation_status = reservation_status;
+        if (reservation_status === "예약취소") {
+          target.canceled_at = new Date().toISOString();
+        }
+        const syncMap = { 예약확정: "예약중", 예약취소: "판매중", 거래완료: "거래완료" };
+        const post_status = syncMap[reservation_status] || null;
+        if (post_status) {
+          const post = mockDB.product_post.find((p) => p.post_id === target.post_id);
+          if (post) post.status = post_status;
+        }
+        saveMockChats();
+        return { message: `${reservation_status} 처리 완료`, reservation: target, post_status };
+      },
+
+      // 14. GET /api/reservations/{user_id}
+      async getUserReservations(user_id) {
+        if (!USE_MOCK) {
+          return apiFetch(`/api/reservations/${user_id}`);
+        }
+        loadMockChats();
+        const uid = Number(user_id);
+        const myPostIds = mockDB.product_post.filter((p) => p.user_id === uid).map((p) => p.post_id);
+        const matched = mockDB.reservation_info
+          .filter((r) => r.user_id === uid || myPostIds.includes(r.post_id))
+          .sort((a, b) => new Date(b.reservation_at) - new Date(a.reservation_at));
+        return matched.map((r) => {
+          const buyer = mockDB.users.find((u) => u.user_id === r.user_id);
+          const post = mockDB.product_post.find((p) => p.post_id === r.post_id);
+          return {
+            ...r,
+            buyer_nickname: buyer ? buyer.nickname : "알 수 없음",
+            post: post ? mockEnrichPost(post, uid) : null,
+          };
+        });
+      },
+
+      // 15. POST /api/chatrooms
+      async getOrCreateChatroom({ post_id, buyer_id }) {
+        if (!USE_MOCK) {
+          return apiFetch("/api/chatrooms", {
+            method: "POST",
+            body: JSON.stringify({ post_id, buyer_id }),
+          });
+        }
+        loadMockChats();
+        const post = mockDB.product_post.find((p) => p.post_id === Number(post_id));
+        if (!post) throw new Error("게시글을 찾을 수 없습니다.");
+        if (post.user_id === Number(buyer_id)) {
+          throw new Error("본인의 게시글에는 채팅방을 만들 수 없습니다.");
+        }
+        const existingRoom = mockDB.chatroom.find((r) => {
+          if (r.post_id !== Number(post_id)) return false;
+          const uids = mockDB.chat_participant
+            .filter((p) => p.chatroom_id === r.chatroom_id)
+            .map((p) => p.user_id);
+          return uids.includes(Number(buyer_id));
+        });
+        if (existingRoom) {
+          return { message: "기존 채팅방 입장", chatroom_id: existingRoom.chatroom_id };
+        }
+        const chatroom_id = Math.max(Date.now(), ...mockDB.chatroom.map((r) => r.chatroom_id + 1));
+        mockDB.chatroom.push({
+          chatroom_id,
+          chat_created: new Date().toISOString(),
+          post_id: Number(post_id),
+        });
+        let pid = Math.max(0, ...mockDB.chat_participant.map((p) => p.participant_id)) + 1;
+        mockDB.chat_participant.push({ participant_id: pid++, user_id: post.user_id, chatroom_id });
+        mockDB.chat_participant.push({ participant_id: pid++, user_id: Number(buyer_id), chatroom_id });
+        saveMockChats();
+        return { message: "새 채팅방 생성 완료", chatroom_id };
+      },
+
+      async deleteChatroom(chatroomId, user) {
+        if (!USE_MOCK) {
+          return apiFetch(`/api/chatrooms/${chatroomId}`, {
+            method: "DELETE",
+            headers: { Authorization: `Bearer ${user.chat_session || ""}` },
+          });
+        }
+        loadMockChats();
+        mockDB.chatroom = mockDB.chatroom.filter((room) => room.chatroom_id !== chatroomId);
+        mockDB.chat_participant = mockDB.chat_participant.filter((part) => part.chatroom_id !== chatroomId);
+        mockDB.chat_message = mockDB.chat_message.filter((message) => message.chatroom_id !== chatroomId);
+        saveMockChats();
+      },
+
+      // 16. GET /api/chatrooms/{user_id}
+      async getChatrooms(user_id) {
+        if (!USE_MOCK) {
+          return apiFetch(`/api/chatrooms/${user_id}`);
+        }
+        loadMockChats();
+        const uid = Number(user_id);
+        const roomIds = mockDB.chat_participant
+          .filter((p) => p.user_id === uid)
+          .map((p) => p.chatroom_id);
+        return roomIds
+          .map((cid) => {
+            const room = mockDB.chatroom.find((r) => r.chatroom_id === cid);
+            if (!room) return null;
+            const post = mockDB.product_post.find((p) => p.post_id === room.post_id);
+            const parts = mockDB.chat_participant.filter((p) => p.chatroom_id === cid);
+            const partnerPart = parts.find((p) => p.user_id !== uid);
+            const partner = partnerPart
+              ? mockDB.users.find((u) => u.user_id === partnerPart.user_id)
+              : null;
+            const msgs = mockDB.chat_message
+              .filter((m) => m.chatroom_id === cid)
+              .sort((a, b) => new Date(b.sent_at) - new Date(a.sent_at));
+            const lastMsg = msgs[0] || null;
+            const buyerId = parts.find((part) => part.user_id !== post?.user_id)?.user_id;
+            const resList = mockDB.reservation_info
+              .filter((r) => r.post_id === room.post_id && r.user_id === buyerId)
+              .sort((a, b) => b.reservation_id - a.reservation_id);
+            return {
+              chatroom_id: cid,
+              post_id: room.post_id,
+              chat_created: room.chat_created,
+              partner_id: partner ? partner.user_id : null,
+              partner_nickname: partner ? partner.nickname : "알 수 없음",
+              post: post ? mockEnrichPost(post, uid) : null,
+              last_message: lastMsg ? lastMsg.content : "대화를 시작해 보세요.",
+              last_sent_at: lastMsg ? lastMsg.sent_at : room.chat_created,
+              last_received_message_id: msgs.find((m) => m.user_id !== uid)?.message_id || 0,
+              latest_reservation: resList[0] || null,
+            };
+          })
+          .filter(Boolean)
+          .sort((a, b) => new Date(b.last_sent_at) - new Date(a.last_sent_at));
+      },
+
+      // 17. GET /api/chatrooms/{chatroom_id}/messages
+      async getChatMessages(chatroom_id) {
+        if (!USE_MOCK) {
+          return apiFetch(`/api/chatrooms/${chatroom_id}/messages`);
+        }
+        loadMockChats();
+        const room = mockDB.chatroom.find((r) => r.chatroom_id === Number(chatroom_id));
+        if (!room) throw Object.assign(new Error("채팅방을 찾을 수 없습니다."), { status: 404 });
+        const post = mockDB.product_post.find((p) => p.post_id === room.post_id);
+        const buyerId = mockDB.chat_participant.find((part) =>
+          part.chatroom_id === room.chatroom_id && part.user_id !== post?.user_id)?.user_id;
+        const msgs = mockDB.chat_message
+          .filter((m) => m.chatroom_id === room.chatroom_id)
+          .sort((a, b) => new Date(a.sent_at) - new Date(b.sent_at))
+          .map((m) => {
+            const sender = mockDB.users.find((u) => u.user_id === m.user_id);
+            return { ...m, sender_nickname: sender ? sender.nickname : "알 수 없음" };
+          });
+        const resList = mockDB.reservation_info
+          .filter((r) => r.post_id === room.post_id && r.user_id === buyerId)
+          .sort((a, b) => b.reservation_id - a.reservation_id);
+        return {
+          chatroom_id: room.chatroom_id,
+          post: post ? mockEnrichPost(post) : null,
+          buyer_id: buyerId,
+          latest_reservation: resList[0] || null,
+          messages: msgs,
+        };
+      },
+
+      // 18. POST /api/chatrooms/{chatroom_id}/messages
+      async sendChatMessage(chatroom_id, { user_id, content }) {
+        if (!USE_MOCK) {
+          return apiFetch(`/api/chatrooms/${chatroom_id}/messages`, {
+            method: "POST",
+            body: JSON.stringify({ user_id, content }),
+          });
+        }
+        loadMockChats();
+        if (!mockDB.chatroom.some((room) => room.chatroom_id === Number(chatroom_id))) {
+          throw new Error("채팅방을 찾을 수 없습니다.");
+        }
+        const message_id = Math.max(Date.now(), ...mockDB.chat_message.map((m) => m.message_id + 1));
+        const sender = mockDB.users.find((u) => u.user_id === Number(user_id));
+        const saved = {
+          message_id,
+          content: content.trim(),
+          sent_at: new Date().toISOString(),
+          chatroom_id: Number(chatroom_id),
+          user_id: Number(user_id),
+          sender_nickname: sender ? sender.nickname : "알 수 없음",
+        };
+        mockDB.chat_message.push(saved);
+        saveMockChats();
+        return saved;
+      },
+    };
+
+    /* =========================================================================
+       5. APPLICATION STATE & SESSION STORAGE PERSISTENCE
+       ========================================================================= */
+    function loadSessionUser() {
+      try {
+        const raw = sessionStorage.getItem(SESSION_KEY);
+        return raw ? JSON.parse(raw) : null;
+      } catch {
+        return null;
+      }
+    }
+
+    function saveSessionUser(user) {
+      try {
+        if (user) {
+          sessionStorage.setItem(SESSION_KEY, JSON.stringify(user));
+        } else {
+          sessionStorage.removeItem(SESSION_KEY);
+        }
+      } catch (e) {
+        console.warn("sessionStorage unavailable:", e);
+      }
+    }
+
+    function loadPostDraft() {
+      try {
+        const raw = localStorage.getItem(DRAFT_KEY);
+        if (!raw) return { title: "", price: "", description: "", images: [] };
+        const parsed = JSON.parse(raw);
+        return {
+          title: parsed.title || "",
+          price: parsed.price || "",
+          description: parsed.description || "",
+          images: Array.isArray(parsed.images) ? parsed.images : [],
+        };
+      } catch {
+        return { title: "", price: "", description: "", images: [] };
+      }
+    }
+
+    const state = {
+      screen: "auth", // auth | verify | home | create | detail | chats | chatroom | wishlist | mypage | my_sales | my_reservations
+      prevScreen: "home",
+      currentUser: loadSessionUser(),
+      authTab: "login",
+      authInlineError: "",
+      neighborhoods: [],
+      selectedNeighborhoodId: null,
+      homeFilter: {
+        scope: "mine", // "mine" | "all"
+        status: "전체",
+        q: "",
+      },
+      wishlistFilter: "전체",
+      wishlistEditMode: false,
+      activePostId: null,
+      activeChatroomId: null,
+      activePartnerId: null,
+      activePartnerNickname: "",
+      draftPost: loadPostDraft(),
+    };
+
+    let searchDebounceTimer = null;
+
+    /* =========================================================================
+       6. UTILITY & FORMATTING HELPERS
+       ========================================================================= */
+    function escapeHtml(value) {
+      return String(value ?? "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+    }
+
+    function hasBatchim(word) {
+      if (!word) return false;
+      const code = word.charCodeAt(word.length - 1);
+      if (code < 0xac00 || code > 0xd7a3) return false;
+      return (code - 0xac00) % 28 !== 0;
+    }
+
+    function withSubjectParticle(word) {
+      return `${word}${hasBatchim(word) ? "이" : "가"}`;
+    }
+
+    function withDirectionParticle(word) {
+      if (!word) return "";
+      const code = word.charCodeAt(word.length - 1);
+      if (code >= 0xac00 && code <= 0xd7a3) {
+        const jong = (code - 0xac00) % 28;
+        // ㄹ 받침(8) 또는 받침 없음(0) -> '로'
+        return `${word}${jong === 0 || jong === 8 ? "로" : "으로"}`;
+      }
+      return `${word}으로`;
+    }
+
+    function formatPhoneInput(raw) {
+      const digits = raw.replace(/\D/g, "").slice(0, 11);
+      if (digits.length <= 3) return digits;
+      if (digits.length <= 7) return `${digits.slice(0, 3)}-${digits.slice(3)}`;
+      return `${digits.slice(0, 3)}-${digits.slice(3, 7)}-${digits.slice(7)}`;
+    }
+
+    function formatPrice(num) {
+      return `${Number(num || 0).toLocaleString("ko-KR")}원`;
+    }
+
+    function formatRelativeTime(iso) {
+      if (!iso) return "";
+      const diffSec = Math.max(0, Math.floor((Date.now() - new Date(iso).getTime()) / 1000));
+      if (diffSec < 60) return "방금 전";
+      const min = Math.floor(diffSec / 60);
+      if (min < 60) return `${min}분 전`;
+      const hr = Math.floor(min / 60);
+      if (hr < 24) return `${hr}시간 전`;
+      const day = Math.floor(hr / 24);
+      return day === 1 ? "어제" : `${day}일 전`;
+    }
+
+    function formatChatTime(iso) {
+      if (!iso) return "";
+      const d = new Date(iso);
+      return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+    }
+
+    function formatChatListTime(iso) {
+      if (!iso) return "";
+      const d = new Date(iso);
+      const diffHours = (Date.now() - d.getTime()) / 3600000;
+      if (diffHours >= 48) {
+        return `${d.getMonth() + 1}월 ${d.getDate()}일`;
+      }
+      if (diffHours >= 24) return "어제";
+      const h = d.getHours();
+      const ampm = h >= 12 ? "오후" : "오전";
+      const h12 = h % 12 === 0 ? 12 : h % 12;
+      return `${ampm} ${h12}:${String(d.getMinutes()).padStart(2, "0")}`;
+    }
+
+    function formatReservationDate(iso) {
+      if (!iso) return "시간 미정";
+      const d = new Date(iso);
+      if (Number.isNaN(d.getTime())) return String(iso);
+      const days = ["일", "월", "화", "수", "목", "금", "토"];
+      const now = new Date();
+      const isToday =
+        d.getFullYear() === now.getFullYear() &&
+        d.getMonth() === now.getMonth() &&
+        d.getDate() === now.getDate();
+      const tomorrow = new Date(now);
+      tomorrow.setDate(now.getDate() + 1);
+      const isTomorrow =
+        d.getFullYear() === tomorrow.getFullYear() &&
+        d.getMonth() === tomorrow.getMonth() &&
+        d.getDate() === tomorrow.getDate();
+
+      const h = d.getHours();
+      const ampm = h >= 12 ? "오후" : "오전";
+      const h12 = h % 12 === 0 ? 12 : h % 12;
+      const min = String(d.getMinutes()).padStart(2, "0");
+
+      if (isToday) return `오늘 ${ampm} ${h12}:${min}`;
+      if (isTomorrow) return `내일 ${ampm} ${h12}:${min}`;
+      return `${d.getMonth() + 1}월 ${d.getDate()}일 (${days[d.getDay()]}) ${ampm} ${h12}:${min}`;
+    }
+
+    function formatChatDateDivider(iso) {
+      const d = iso ? new Date(iso) : new Date();
+      const days = ["일", "월", "화", "수", "목", "금", "토"];
+      return `${d.getMonth() + 1}월 ${d.getDate()}일 ${days[d.getDay()]}요일`;
+    }
+
+    function renderStatusBadge(status) {
+      if (status === "예약중") {
+        return `<span class="inline-flex items-center px-1.5 py-0.5 rounded-[5px] text-[10px] font-bold bg-reserved-bg text-reserved-text leading-[14px]">예약중</span>`;
+      }
+      if (status === "거래완료") {
+        return `<span class="inline-flex items-center px-1.5 py-0.5 rounded-[5px] text-[10px] font-bold bg-surface-muted text-muted leading-[14px]">거래완료</span>`;
+      }
+      return `<span class="inline-flex items-center px-1.5 py-0.5 rounded-[5px] text-[10px] font-bold bg-primary-soft text-primary leading-[14px]">판매중</span>`;
+    }
+
+    function renderModePill(clickable = false) {
+      const label = USE_MOCK ? "데모 모드" : "실서버 연동 (127.0.0.1:8000)";
+      const dotColor = USE_MOCK ? "bg-[#D97706]" : "bg-primary";
+      const cls = clickable
+        ? "cursor-pointer hover:border-primary active:scale-95 transition-all"
+        : "";
+      return `
+        <button
+          type="button"
+          ${clickable ? 'id="toggle-mode-pill"' : ""}
+          title="${clickable ? "클릭하여 실서버/데모 모드 전환" : label}"
+          class="inline-flex items-center gap-1.5 h-[26px] px-2.5 rounded-full border border-border bg-surface-muted text-[10px] font-bold text-ink ${cls}"
+        >
+          <span class="w-1.5 h-1.5 rounded-full ${dotColor}"></span>
+          <span>${label}</span>
+        </button>
+      `;
+    }
+
+    function showToast(message, type = "default") {
+      if (typeof message !== "string" || !message.trim()) return;
+      const root = document.getElementById("toast-root");
+      const el = document.createElement("div");
+      el.dataset.type = type;
+      el.className = "toast-message text-[13px] font-medium px-4 py-2.5 rounded-full shadow-lg text-center max-w-[340px]";
+      el.textContent = message;
+      root.appendChild(el);
+      setTimeout(() => el.remove(), 2400);
+    }
+
+    function openModal(html) {
+      const modalRoot = document.getElementById("modal-root");
+      modalRoot.innerHTML = html;
+      const panel = modalRoot.firstElementChild;
+      if (!panel?.textContent.trim()) return closeModal();
+      panel.setAttribute("role", "dialog");
+      panel.setAttribute("aria-modal", "true");
+      panel.tabIndex = -1;
+      const heading = panel.querySelector("h2, h3");
+      if (heading) {
+        heading.id ||= "modal-heading";
+        panel.setAttribute("aria-labelledby", heading.id);
+      } else {
+        panel.setAttribute("aria-label", "메뉴");
+      }
+      modalRoot.hidden = false;
+      panel.focus();
+      modalRoot.onclick = (e) => {
+        if (e.target === modalRoot) closeModal();
+      };
+    }
+
+    function closeModal() {
+      const modalRoot = document.getElementById("modal-root");
+      modalRoot.hidden = true;
+      modalRoot.innerHTML = "";
+    }
+
+    document.addEventListener("keydown", (event) => {
+      if (event.key === "Escape" && !document.getElementById("modal-root").hidden) closeModal();
+    });
+
+    /**
+     * Custom confirmation modal for deleting own posts (no browser confirm())
+     */
+    function openDeletePostModal(post, onDeleted) {
+      openModal(`
+        <div class="w-full max-w-[390px] bg-white rounded-t-[20px] p-5 flex flex-col gap-4 shadow-2xl">
+          <div class="flex flex-col gap-1.5">
+            <div class="w-10 h-10 rounded-[12px] bg-danger-soft text-danger flex items-center justify-center mb-1">
+              <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="3 6 5 6 21 6"/>
+                <path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/>
+                <path d="M10 11v6M14 11v6"/>
+                <path d="M9 6V4a1 1 0 011-1h4a1 1 0 011 1v2"/>
+              </svg>
+            </div>
+            <h3 class="text-[17px] font-bold text-ink">정말 이 판매글을 삭제할까요?</h3>
+            <p class="text-[13px] text-muted leading-[19.5px]">
+              연결된 채팅과 예약 정보도 함께 삭제됩니다.
+            </p>
+            ${
+              post?.post_title
+                ? `<div class="mt-1 px-3 py-2 rounded-[10px] bg-surface-muted text-[12px] font-medium text-ink truncate">${escapeHtml(post.post_title)}</div>`
+                : ""
+            }
+          </div>
+          <div class="grid grid-cols-2 gap-2.5">
+            <button
+              type="button"
+              id="cancel-delete-post"
+              class="h-[48px] rounded-[12px] bg-surface-muted text-[14px] font-bold text-muted hover:text-ink transition-colors"
+            >취소</button>
+            <button
+              type="button"
+              id="confirm-delete-post"
+              class="h-[48px] rounded-[12px] bg-danger hover:bg-danger-hover active:scale-[0.99] text-[14px] font-bold text-white transition-all disabled:opacity-60"
+            >삭제하기</button>
+          </div>
+        </div>
+      `);
+
+      document.getElementById("cancel-delete-post").onclick = closeModal;
+      document.getElementById("confirm-delete-post").onclick = async () => {
+        const btn = document.getElementById("confirm-delete-post");
+        btn.disabled = true;
+        btn.textContent = "삭제 중...";
+        try {
+          await api.deletePost(post.post_id, state.currentUser.user_id);
+          closeModal();
+          showToast("게시글이 삭제되었어요.");
+          if (typeof onDeleted === "function") onDeleted();
+        } catch (err) {
+          showToast(err.message || "게시글 삭제에 실패했어요.", "error");
+          btn.disabled = false;
+          btn.textContent = "삭제하기";
+        }
+      };
+    }
+
+    let chatSocket = null;
+    let chatConnected = false;
+    let rejectedChatSession = null;
+    let chatRooms = [];
+    let chatListRequest = 0;
+    let updateChatList = null;
+    let syncOpenChat = null;
+    let lastChatSync = 0;
+
+    function chatReadKey(roomId) {
+      return `dongne_chat_read:${USE_MOCK ? "demo" : "server"}:${state.currentUser.user_id}:${roomId}`;
+    }
+
+    function isUnread(room) {
+      return room.last_received_message_id > Number(localStorage.getItem(chatReadKey(room.chatroom_id)) || 0);
+    }
+
+    function markChatRead(roomId, messages) {
+      const key = chatReadKey(roomId);
+      const previous = Number(localStorage.getItem(key) || 0);
+      const latest = messages.reduce((id, message) => message.user_id === state.currentUser.user_id
+        ? id : Math.max(id, message.message_id), previous);
+      if (latest > previous) localStorage.setItem(key, String(latest));
+    }
+
+    function renderChatBadge() {
+      const badge = document.getElementById("chat-nav-badge");
+      if (!badge || !state.currentUser) return;
+      const count = chatRooms.filter(isUnread).length;
+      badge.hidden = count === 0;
+      badge.textContent = count > 99 ? "99+" : String(count);
+      badge.parentElement.setAttribute("aria-label", count ? `채팅, 읽지 않은 대화 ${count}개` : "채팅");
+    }
+
+    async function refreshChats() {
+      const userId = state.currentUser?.user_id;
+      if (!userId) return;
+      const request = ++chatListRequest;
+      try {
+        const rooms = await api.getChatrooms(userId);
+        if (request !== chatListRequest || state.currentUser?.user_id !== userId) return;
+        chatRooms = rooms;
+        renderChatBadge();
+        updateChatList?.(rooms);
+      } catch (error) {
+        if (request === chatListRequest) updateChatList?.(null, error);
+      }
+    }
+
+    function chatConnectionLabel() {
+      if (USE_MOCK) return "데모 채팅";
+      return chatConnected ? "실시간 채팅 연결됨" : "자동 새로고침 중";
+    }
+
+    function handleChatUpdate(event) {
+      syncOpenChat?.(event);
+      refreshChats();
+    }
+
+    function connectChatUpdates() {
+      const session = state.currentUser?.chat_session;
+      if (USE_MOCK || !session || chatSocket || session === rejectedChatSession) return;
+
+      const socket = new WebSocket(`${WS_BASE}/ws/chat-updates`);
+      chatSocket = socket;
+      socket.onopen = () => {
+        if (chatSocket === socket) socket.send(session);
+      };
+      socket.onmessage = ({ data }) => {
+        if (chatSocket !== socket) return;
+        const event = JSON.parse(data);
+        if (event.type === "ready") chatConnected = true;
+        handleChatUpdate(event);
+      };
+      socket.onclose = (event) => {
+        if (chatSocket !== socket) return;
+        if (event.code === 1008) rejectedChatSession = session;
+        chatSocket = null;
+        chatConnected = false;
+        handleChatUpdate({ type: "refresh" });
+      };
+    }
+
+    function resetChatUpdates() {
+      const socket = chatSocket;
+      chatSocket = null;
+      socket?.close();
+      chatConnected = false;
+      chatRooms = [];
+      chatListRequest++;
+      lastChatSync = 0;
+    }
+
+    function pollChatUpdates() {
+      if (!state.currentUser) return;
+      connectChatUpdates();
+      if (Date.now() - lastChatSync < (chatConnected ? 30000 : 4000)) return;
+      lastChatSync = Date.now();
+      handleChatUpdate({ type: "refresh" });
+    }
+
+    window.addEventListener("storage", (event) => {
+      if (!state.currentUser) return;
+      if (USE_MOCK && event.key === MOCK_CHAT_KEY) handleChatUpdate({ type: "refresh" });
+      if (event.key?.startsWith("dongne_chat_read:")) {
+        renderChatBadge();
+        updateChatList?.(chatRooms);
+      }
+    });
+
+    function navigate(nextScreen, params = {}) {
+      closeModal();
+      syncOpenChat = null;
+      updateChatList = null;
+      if (state.screen !== nextScreen) {
+        state.prevScreen = state.screen;
+      }
+      if (params.postId !== undefined) state.activePostId = params.postId;
+      if (params.chatroomId !== undefined) state.activeChatroomId = params.chatroomId;
+      if (params.partnerId !== undefined) state.activePartnerId = params.partnerId;
+      if (params.partnerNickname !== undefined) state.activePartnerNickname = params.partnerNickname;
+      if (params.authTab !== undefined) state.authTab = params.authTab;
+
+      state.screen = nextScreen;
+      renderApp();
+      pollChatUpdates();
+    }
+
+    /* =========================================================================
+       7. FIXED 4-TAB BOTTOM NAVIGATION
+       ========================================================================= */
+    function renderBottomNav() {
+      const nav = document.getElementById("bottom-nav");
+      const showOn = ["home", "wishlist", "chats", "mypage"];
+      if (!state.currentUser || !showOn.includes(state.screen)) {
+        nav.classList.add("hidden");
+        nav.innerHTML = "";
+        return;
+      }
+
+      const tabs = [
+        {
+          id: "home",
+          label: "홈",
+          icon: (active) => `
+            <svg class="w-[22px] h-[22px]" viewBox="0 0 24 24" fill="none" stroke="${active ? "#1D7B58" : "#95A19A"}" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M3 10.5L12 3l9 7.5"/>
+              <path d="M5 9.5V20a1 1 0 001 1h12a1 1 0 001-1V9.5"/>
+              <path d="M9.5 21v-6h5v6"/>
+            </svg>`,
+        },
+        {
+          id: "wishlist",
+          label: "관심목록",
+          icon: (active) => `
+            <svg class="w-[22px] h-[22px]" viewBox="0 0 24 24" fill="none" stroke="${active ? "#1D7B58" : "#95A19A"}" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M12 20.5S4 15.2 4 9.3C4 6.5 6.2 4.5 8.8 4.5c1.5 0 2.6.8 3.2 1.8.6-1 1.7-1.8 3.2-1.8 2.6 0 4.8 2 4.8 4.8 0 5.9-8 11.2-8 11.2z"/>
+            </svg>`,
+        },
+        {
+          id: "chats",
+          label: "채팅",
+          icon: (active) => `
+            <svg class="w-[22px] h-[22px]" viewBox="0 0 24 24" fill="none" stroke="${active ? "#1D7B58" : "#95A19A"}" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M4 5.5h16a1 1 0 011 1v10a1 1 0 01-1 1H9l-4.5 3v-3H4a1 1 0 01-1-1v-10a1 1 0 011-1z"/>
+            </svg>`,
+        },
+        {
+          id: "mypage",
+          label: "마이페이지",
+          icon: (active) => `
+            <svg class="w-[22px] h-[22px]" viewBox="0 0 24 24" fill="none" stroke="${active ? "#1D7B58" : "#95A19A"}" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="8" r="3.5"/>
+              <path d="M5 19.5c.8-3.2 3.5-5 7-5s6.2 1.8 7 5"/>
+            </svg>`,
+        },
+      ];
+
+      nav.classList.remove("hidden");
+      nav.innerHTML = `
+        <div class="grid grid-cols-4">
+          ${tabs
+            .map((t) => {
+              const active = state.screen === t.id;
+              return `
+                <button
+                  type="button"
+                  data-nav-tab="${t.id}"
+                  class="relative flex flex-col items-center justify-center py-1 rounded-[10px] active:bg-surface-muted transition-colors"
+                >
+                  ${t.icon(active)}
+                  ${t.id === "chats" ? `<span id="chat-nav-badge" hidden aria-hidden="true" class="absolute top-0 left-[calc(50%+5px)] min-w-[16px] px-1 rounded-full bg-danger text-white text-[10px] font-bold leading-4 text-center"></span>` : ""}
+                  <span class="mt-1 text-[10px] leading-[14.5px] ${
+                    active ? "font-bold text-primary" : "font-normal text-muted"
+                  }">${t.label}</span>
+                </button>
+              `;
+            })
+            .join("")}
+        </div>
+      `;
+
+      nav.querySelectorAll("[data-nav-tab]").forEach((btn) => {
+        btn.addEventListener("click", () => navigate(btn.dataset.navTab));
+      });
+      renderChatBadge();
+    }
+
+    /* =========================================================================
+       8. SCREEN RENDERERS (01 ~ 09 + MYPAGE SUBVIEWS)
+       ========================================================================= */
+
+    /**
+     * [01] 로그인 · 회원가입
+     */
+    function renderAuthScreen(root) {
+      const isLogin = state.authTab === "login";
+
+      root.innerHTML = `
+        <div class="flex-1 flex flex-col min-h-0 bg-white">
+          <header class="flex-none h-[56px] px-5 flex items-center justify-between">
+            <span class="text-[19px] font-bold text-ink leading-[27.55px]">동네마켓</span>
+            ${renderModePill(true)}
+          </header>
+
+          <div class="flex-1 overflow-y-auto px-6 pt-7 pb-6 flex flex-col">
+            <h1 class="text-[27px] font-bold text-ink leading-[39.15px] tracking-[-0.02em]">
+              가까운 이웃과,<br />가벼운 거래를 시작해요
+            </h1>
+            <p class="mt-3 text-[14px] text-muted leading-[20.3px]">
+              우리 동네 물건을 나누는 가장 간단한 방법
+            </p>
+
+            <!-- Segmented Tab -->
+            <div class="mt-7 h-[46px] p-1 rounded-[12px] bg-surface-muted grid grid-cols-2 gap-1">
+              <button
+                type="button"
+                id="tab-login"
+                class="rounded-[9px] text-[14px] transition-all ${
+                  isLogin ? "bg-white text-primary font-bold shadow-[0_1px_2px_rgba(24,35,30,0.06)]" : "text-muted font-normal"
+                }"
+              >로그인</button>
+              <button
+                type="button"
+                id="tab-signup"
+                class="rounded-[9px] text-[14px] transition-all ${
+                  !isLogin ? "bg-white text-primary font-bold shadow-[0_1px_2px_rgba(24,35,30,0.06)]" : "text-muted font-normal"
+                }"
+              >회원가입</button>
+            </div>
+
+            <!-- Inline Error Alert -->
+            <div id="auth-error-box" class="${state.authInlineError ? "" : "hidden"} mt-4 p-3 rounded-[12px] bg-[#FEF2F2] border border-[#FECACA] text-[#B91C1C] text-[12px] leading-[18px]">
+              ${escapeHtml(state.authInlineError)}
+            </div>
+
+            <form id="auth-form" class="mt-6 flex flex-col gap-4">
+              <div class="flex flex-col gap-1.5">
+                <label for="auth-phone" class="text-[13px] font-bold text-ink leading-[18.85px]">전화번호</label>
+                <input
+                  id="auth-phone"
+                  type="tel"
+                  inputmode="numeric"
+                  required
+                  maxlength="13"
+                  value="${USE_MOCK && isLogin ? "010-1234-5678" : ""}"
+                  placeholder="010-1234-5678"
+                  class="w-full h-[50px] px-3.5 rounded-[12px] border border-input-border bg-white text-[14px] text-ink placeholder:text-muted/70 focus:outline-none focus:border-primary"
+                />
+              </div>
+
+              <div class="flex flex-col gap-1.5">
+                <label for="auth-password" class="text-[13px] font-bold text-ink leading-[18.85px]">비밀번호</label>
+                <input
+                  id="auth-password"
+                  type="password"
+                  required
+                  value="${USE_MOCK && isLogin ? "1234" : ""}"
+                  placeholder="비밀번호를 입력해 주세요"
+                  class="w-full h-[50px] px-3.5 rounded-[12px] border border-input-border bg-white text-[14px] text-ink placeholder:text-muted/70 focus:outline-none focus:border-primary"
+                />
+              </div>
+
+              ${
+                !isLogin
+                  ? `
+                <div class="flex flex-col gap-1.5">
+                  <label for="auth-nickname" class="text-[13px] font-bold text-ink leading-[18.85px]">닉네임</label>
+                  <input
+                    id="auth-nickname"
+                    type="text"
+                    required
+                    maxlength="30"
+                    placeholder="닉네임을 입력해 주세요"
+                    class="w-full h-[50px] px-3.5 rounded-[12px] border border-input-border bg-white text-[14px] text-ink placeholder:text-muted/70 focus:outline-none focus:border-primary"
+                  />
+                </div>
+              `
+                  : ""
+              }
+
+              <button
+                type="submit"
+                id="auth-submit-btn"
+                class="mt-2 w-full h-[52px] rounded-[14px] bg-primary hover:bg-primary-hover active:scale-[0.99] text-white text-[16px] font-bold transition-all disabled:opacity-60"
+              >
+                ${isLogin ? "로그인" : "회원가입 완료"}
+              </button>
+            </form>
+
+            ${
+              USE_MOCK && isLogin
+                ? `
+              <div class="mt-5 p-3 rounded-[12px] bg-surface-muted flex flex-col gap-2">
+                <span class="text-[11px] font-bold text-muted">데모 모드 원클릭 로그인</span>
+                <div class="grid grid-cols-2 gap-2">
+                  <button type="button" data-demo-user="010-1234-5678" class="h-[36px] rounded-[9px] bg-white border border-border text-[12px] font-medium text-ink hover:border-primary hover:text-primary transition-colors">
+                    구매자 연남이
+                  </button>
+                  <button type="button" data-demo-user="010-2222-3333" class="h-[36px] rounded-[9px] bg-white border border-border text-[12px] font-medium text-ink hover:border-primary hover:text-primary transition-colors">
+                    판매자 모서리
+                  </button>
+                </div>
+              </div>
+            `
+                : ""
+            }
+
+            ${
+              isLogin
+                ? `
+              <div class="mt-7 flex items-center justify-center gap-2 text-[13px] leading-[18.85px]">
+                <span class="text-muted">아직 계정이 없으신가요?</span>
+                <button type="button" id="switch-to-signup" class="font-bold text-primary hover:underline">회원가입</button>
+              </div>
+            `
+                : ""
+            }
+
+            <p class="mt-auto pt-8 text-center text-[11px] text-muted leading-[15.95px]">
+              가입 시 이용약관 및 개인정보 처리방침에 동의해요.
+            </p>
+          </div>
+        </div>
+      `;
+
+      // Toggle Real API / Demo Mode pill on login screen
+      document.getElementById("toggle-mode-pill")?.addEventListener("click", () => {
+        USE_MOCK = !USE_MOCK;
+        state.authInlineError = "";
+        showToast(USE_MOCK ? "미리보기 데모 모드로 전환했어요." : "실서버 연동 모드(127.0.0.1:8000)로 전환했어요.");
+        renderAuthScreen(root);
+      });
+
+      document.getElementById("tab-login").addEventListener("click", () => {
+        state.authTab = "login";
+        state.authInlineError = "";
+        renderAuthScreen(root);
+      });
+
+      document.getElementById("tab-signup").addEventListener("click", () => {
+        state.authTab = "signup";
+        state.authInlineError = "";
+        renderAuthScreen(root);
+      });
+
+      document.getElementById("switch-to-signup")?.addEventListener("click", () => {
+        state.authTab = "signup";
+        state.authInlineError = "";
+        renderAuthScreen(root);
+      });
+
+      const phoneEl = document.getElementById("auth-phone");
+      phoneEl.addEventListener("input", (e) => {
+        e.target.value = formatPhoneInput(e.target.value);
+      });
+
+      root.querySelectorAll("[data-demo-user]").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          document.getElementById("auth-phone").value = btn.dataset.demoUser;
+          document.getElementById("auth-password").value = "1234";
+          document.getElementById("auth-form").requestSubmit();
+        });
+      });
+
+      document.getElementById("auth-form").addEventListener("submit", async (e) => {
+        e.preventDefault();
+        const submitBtn = document.getElementById("auth-submit-btn");
+        const phone_num = document.getElementById("auth-phone").value.trim();
+        const password = document.getElementById("auth-password").value.trim();
+
+        state.authInlineError = "";
+        submitBtn.disabled = true;
+        submitBtn.textContent = isLogin ? "로그인 중..." : "가입 처리 중...";
+
+        try {
+          if (isLogin) {
+            const res = await api.login({ phone_num, password });
+            state.currentUser = { ...res.user, chat_session: res.chat_session };
+            saveSessionUser(state.currentUser);
+            showToast(`${res.user.nickname}님, 반가워요!`);
+            navigate(res.user.is_verified ? "home" : "verify");
+          } else {
+            const nickname = document.getElementById("auth-nickname").value.trim();
+            if (!nickname) {
+              throw new Error("닉네임을 입력해 주세요.");
+            }
+            const res = await api.signup({ phone_num, password, nickname });
+            state.currentUser = { ...res.user, chat_session: res.chat_session };
+            saveSessionUser(state.currentUser);
+            showToast("회원가입이 완료되었어요! 동네 인증을 진행해 주세요.");
+            navigate("verify");
+          }
+        } catch (err) {
+          state.authInlineError = err.message || "요청 처리 중 오류가 발생했습니다.";
+          showToast(state.authInlineError, "error");
+          const errBox = document.getElementById("auth-error-box");
+          if (errBox) {
+            errBox.textContent = state.authInlineError;
+            errBox.classList.remove("hidden");
+          }
+          submitBtn.disabled = false;
+          submitBtn.textContent = isLogin ? "로그인" : "회원가입 완료";
+        }
+      });
+    }
+
+    /**
+     * [02] 동네 인증
+     */
+    async function renderVerifyScreen(root) {
+      root.innerHTML = `
+        <div class="flex-1 flex items-center justify-center bg-white text-[13px] text-muted">
+          동네 정보를 불러오는 중...
+        </div>
+      `;
+
+      try {
+        const list = await api.getNeighborhoods();
+        state.neighborhoods = list;
+      } catch (err) {
+        showToast(err.message, "error");
+        state.neighborhoods = [...mockDB.neighborhoods];
+      }
+
+      if (state.neighborhoods.length === 0) {
+        root.innerHTML = `
+          <div class="flex-1 flex flex-col items-center justify-center p-6 text-center bg-white">
+            <p class="text-[15px] font-bold text-ink">등록된 동네 정보가 없어요</p>
+            <p class="mt-1 text-[12px] text-muted">Supabase neighborhood 테이블에 기본 동네 데이터를 추가해 주세요.</p>
+          </div>
+        `;
+        return;
+      }
+
+      if (
+        !state.selectedNeighborhoodId ||
+        !state.neighborhoods.some((n) => n.neighborhood_id === state.selectedNeighborhoodId)
+      ) {
+        state.selectedNeighborhoodId =
+          state.currentUser?.neighborhood_id || state.neighborhoods[0].neighborhood_id;
+      }
+
+      const drawVerifyView = () => {
+        const selected =
+          state.neighborhoods.find((n) => n.neighborhood_id === state.selectedNeighborhoodId) ||
+          state.neighborhoods[0];
+        const canGoBack = Boolean(state.currentUser?.is_verified);
+
+        root.innerHTML = `
+          <div class="flex-1 flex flex-col min-h-0 bg-white">
+            <header class="flex-none h-[56px] px-4 flex items-center gap-2.5">
+              <button
+                type="button"
+                id="verify-back-btn"
+                aria-label="뒤로가기"
+                class="p-1.5 -ml-1.5 rounded-[10px] hover:bg-surface-muted text-ink"
+              >
+                <svg class="w-[22px] h-[22px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M15 18l-6-6 6-6"/>
+                </svg>
+              </button>
+              <h2 class="text-[19px] font-bold text-ink leading-[27.55px]">동네 인증</h2>
+            </header>
+
+            <div class="flex-1 overflow-y-auto px-[18px] pt-2 pb-6 flex flex-col">
+              <div class="px-1">
+                <h1 class="text-[25px] font-bold text-ink leading-[36.25px]">
+                  지금 계신 곳이<br />${escapeHtml(withSubjectParticle(selected.neighborhood_name))} 맞나요?
+                </h1>
+                <p class="mt-2.5 text-[14px] text-muted leading-[20.3px]">
+                  현재 위치로 우리 동네 이웃임을 확인해요.
+                </p>
+              </div>
+
+              <!-- Styled SVG Neighborhood Boundary Map -->
+              <div class="mt-5 h-[248px] rounded-[22px] border border-border bg-surface-muted overflow-hidden relative flex-none">
+                <svg viewBox="0 0 354 268" class="w-full h-full" xmlns="http://www.w3.org/2000/svg">
+                  <rect width="354" height="268" fill="#EFF4F1"/>
+                  <rect x="14" y="14" width="98" height="72" rx="14" fill="#FFFFFF"/>
+                  <rect x="124" y="14" width="106" height="72" rx="14" fill="#FFFFFF"/>
+                  <rect x="242" y="14" width="98" height="72" rx="14" fill="#FFFFFF"/>
+                  <rect x="14" y="98" width="98" height="72" rx="14" fill="#FFFFFF"/>
+                  <rect x="124" y="98" width="106" height="72" rx="14" fill="#FFFFFF"/>
+                  <rect x="242" y="98" width="98" height="72" rx="14" fill="#FFFFFF"/>
+                  <rect x="14" y="182" width="98" height="72" rx="14" fill="#FFFFFF"/>
+                  <rect x="124" y="182" width="106" height="72" rx="14" fill="#FFFFFF"/>
+                  <rect x="242" y="182" width="98" height="72" rx="14" fill="#FFFFFF"/>
+
+                  <!-- Green avenue line -->
+                  <path d="M-8 224 L362 46" stroke="#C7E3D4" stroke-width="14" stroke-linecap="round"/>
+
+                  <!-- Dashed Green Polygon -->
+                  <polygon
+                    points="64,38 258,34 298,148 232,236 72,218 36,118"
+                    fill="#1D7B58"
+                    fill-opacity="0.07"
+                    stroke="#1D7B58"
+                    stroke-width="2.2"
+                    stroke-dasharray="6 6"
+                  />
+
+                  <!-- Center Pin + Pulse -->
+                  <circle cx="177" cy="136" r="36" fill="#1D7B58" fill-opacity="0.22" class="gps-pulse"/>
+                  <circle cx="177" cy="136" r="13" fill="#FFFFFF"/>
+                  <circle cx="177" cy="136" r="8.5" fill="#1D7B58"/>
+
+                  <!-- "현재 위치" pill -->
+                  <rect x="127" y="76" width="100" height="30" rx="15" fill="#18231E"/>
+                  <text x="177" y="95" text-anchor="middle" fill="#FFFFFF" font-size="12" font-weight="700" font-family="Noto Sans KR, sans-serif">현재 위치</text>
+
+                  <!-- Bottom-right boundary label -->
+                  <text x="334" y="250" text-anchor="end" fill="#637168" font-size="11" font-weight="500" font-family="Noto Sans KR, sans-serif">
+                    ${escapeHtml(selected.neighborhood_name)} 경계
+                  </text>
+                </svg>
+
+                <!-- Top-Right GPS Cycle Button -->
+                <button
+                  type="button"
+                  id="gps-cycle-btn"
+                  title="현재 위치 재탐색"
+                  aria-label="현재 위치 재탐색"
+                  class="absolute top-3 right-3 w-10 h-10 rounded-full bg-white border border-border shadow-sm flex items-center justify-center text-ink hover:text-primary hover:border-primary active:scale-95 transition-all"
+                >
+                  <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="12" cy="12" r="3"/>
+                    <path d="M12 2v3M12 19v3M2 12h3M19 12h3"/>
+                    <circle cx="12" cy="12" r="7"/>
+                  </svg>
+                </button>
+              </div>
+
+              <!-- Clickable Neighborhood Selector Chips -->
+              <div class="mt-3.5 flex items-center gap-2 overflow-x-auto no-scrollbar">
+                ${state.neighborhoods
+                  .map((nb) => {
+                    const active = nb.neighborhood_id === selected.neighborhood_id;
+                    return `
+                      <button
+                        type="button"
+                        data-pick-nb="${nb.neighborhood_id}"
+                        class="flex-none h-[34px] px-3.5 rounded-full text-[12px] transition-all ${
+                          active
+                            ? "bg-primary text-white font-bold"
+                            : "bg-surface-muted text-ink font-normal hover:bg-primary-soft hover:text-primary"
+                        }"
+                      >${escapeHtml(nb.neighborhood_name)}</button>
+                    `;
+                  })
+                  .join("")}
+              </div>
+
+              <!-- Light Green Verification Summary Card -->
+              <div class="mt-4 p-4 rounded-[18px] bg-primary-soft flex items-center gap-3.5">
+                <div class="w-10 h-10 rounded-full bg-primary text-white flex items-center justify-center flex-none">
+                  <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M20 6L9 17l-5-5"/>
+                  </svg>
+                </div>
+                <div class="flex flex-col">
+                  <span class="text-[16px] font-bold text-ink leading-[23.2px]">${escapeHtml(selected.region_info)}</span>
+                  <span class="text-[13px] text-primary leading-[18.85px] mt-0.5">현재 위치가 ${escapeHtml(selected.neighborhood_name)} 안에 있어요.</span>
+                </div>
+              </div>
+
+              <div class="mt-auto pt-7 flex flex-col gap-3">
+                <p class="text-center text-[12px] text-muted leading-[17.4px]">정확한 위치는 이웃에게 공개되지 않아요.</p>
+                <button
+                  type="button"
+                  id="verify-submit-btn"
+                  class="w-full h-[52px] rounded-[14px] bg-primary hover:bg-primary-hover active:scale-[0.99] text-white text-[16px] font-bold transition-all disabled:opacity-60"
+                >
+                  ${escapeHtml(withDirectionParticle(selected.neighborhood_name))} 인증하기
+                </button>
+              </div>
+            </div>
+          </div>
+        `;
+
+        document.getElementById("verify-back-btn").addEventListener("click", () => {
+          if (canGoBack) {
+            navigate(state.prevScreen === "verify" ? "home" : state.prevScreen);
+          } else {
+            navigate("auth");
+          }
+        });
+
+        document.getElementById("gps-cycle-btn").addEventListener("click", () => {
+          const curIdx = state.neighborhoods.findIndex(
+            (n) => n.neighborhood_id === selected.neighborhood_id
+          );
+          const next = state.neighborhoods[(curIdx + 1) % state.neighborhoods.length];
+          state.selectedNeighborhoodId = next.neighborhood_id;
+          showToast(`현재 위치가 '${next.region_info}'(으)로 탐색되었어요.`);
+          drawVerifyView();
+        });
+
+        root.querySelectorAll("[data-pick-nb]").forEach((btn) => {
+          btn.addEventListener("click", () => {
+            state.selectedNeighborhoodId = Number(btn.dataset.pickNb);
+            drawVerifyView();
+          });
+        });
+
+        document.getElementById("verify-submit-btn").addEventListener("click", async () => {
+          const btn = document.getElementById("verify-submit-btn");
+          btn.disabled = true;
+          btn.textContent = "인증 중...";
+          try {
+            const res = await api.verifyNeighborhood({
+              user_id: state.currentUser.user_id,
+              neighborhood_id: selected.neighborhood_id,
+            });
+            state.currentUser = { ...res.user, chat_session: state.currentUser.chat_session };
+            saveSessionUser(state.currentUser);
+            state.homeFilter.scope = "mine";
+            showToast(res.message || `${selected.neighborhood_name} 동네 인증 완료!`);
+            navigate("home");
+          } catch (err) {
+            showToast(err.message, "error");
+            btn.disabled = false;
+            btn.textContent = `${withDirectionParticle(selected.neighborhood_name)} 인증하기`;
+          }
+        });
+      };
+
+      drawVerifyView();
+    }
+
+    /**
+     * [03] 홈 피드 · 검색
+     */
+    async function renderHomeScreen(root) {
+      const user = state.currentUser;
+      const townLabel =
+        state.homeFilter.scope === "all"
+          ? "전체 동네"
+          : user.neighborhood_name || "동네 설정";
+      const statuses = ["전체", "판매중", "예약중", "거래완료"];
+
+      root.innerHTML = `
+        <div class="flex-1 flex flex-col min-h-0 bg-white">
+          <header class="flex-none h-[56px] px-[18px] flex items-center justify-between gap-2">
+            <button
+              type="button"
+              id="home-town-trigger"
+              class="inline-flex items-center gap-1 text-[19px] font-bold text-ink hover:text-primary transition-colors"
+            >
+              <span>${escapeHtml(townLabel)}</span>
+              <svg class="w-4 h-4 mt-0.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M6 9l6 6 6-6"/>
+              </svg>
+            </button>
+            ${renderModePill(false)}
+          </header>
+
+          <!-- Search & Status Filter Bar -->
+          <div class="flex-none px-[18px] pb-3 flex flex-col gap-3">
+            <div class="h-[46px] px-3.5 rounded-[12px] bg-surface-muted border border-transparent focus-within:border-primary focus-within:bg-white flex items-center gap-2 transition-all">
+              <svg class="w-[18px] h-[18px] text-muted flex-none" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="11" cy="11" r="7"/>
+                <path d="M20 20l-3.5-3.5"/>
+              </svg>
+              <input
+                id="home-search-input"
+                type="text"
+                value="${escapeHtml(state.homeFilter.q)}"
+                placeholder="동네에서 찾고 싶은 물건을 검색해요"
+                class="flex-1 bg-transparent text-[14px] text-ink placeholder:text-muted focus:outline-none"
+              />
+              <button
+                type="button"
+                id="home-search-clear"
+                class="${state.homeFilter.q ? "" : "hidden"} text-muted hover:text-ink text-[13px] px-1"
+                aria-label="검색어 지우기"
+              >✕</button>
+            </div>
+
+            <div class="flex items-center gap-2 overflow-x-auto no-scrollbar">
+              ${statuses
+                .map((st) => {
+                  const active = state.homeFilter.status === st;
+                  return `
+                    <button
+                      type="button"
+                      data-home-status="${st}"
+                      class="flex-none h-[34px] px-3.5 rounded-full text-[12px] transition-all ${
+                        active
+                          ? "bg-primary text-white font-bold"
+                          : "bg-surface-muted text-ink font-normal hover:bg-primary-soft hover:text-primary"
+                      }"
+                    >${st}</button>
+                  `;
+                })
+                .join("")}
+            </div>
+          </div>
+
+          <!-- Scrollable Feed Container -->
+          <div class="flex-1 overflow-y-auto px-[18px] pb-4 flex flex-col">
+            <div class="flex items-center justify-between pt-1 pb-3">
+              <h2 class="text-[18px] font-bold text-ink leading-[26.1px]">우리 동네 새 물건</h2>
+              <span class="text-[12px] text-muted">최신순</span>
+            </div>
+
+            <div id="home-post-list" class="flex-1 flex flex-col gap-3">
+              <div class="py-16 text-center text-[13px] text-muted">물건을 불러오는 중...</div>
+            </div>
+
+            <!-- Floating "+ 판매하기" Button -->
+            <div class="sticky bottom-3 pt-4 flex justify-end pointer-events-none">
+              <button
+                type="button"
+                id="fab-sell-btn"
+                class="pointer-events-auto inline-flex items-center gap-1.5 h-[46px] px-5 rounded-full bg-primary hover:bg-primary-hover active:scale-95 text-white text-[14px] font-bold shadow-[0_8px_22px_rgba(29,123,88,0.34)] transition-all"
+              >
+                <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round">
+                  <path d="M12 5v14M5 12h14"/>
+                </svg>
+                <span>판매하기</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      `;
+
+      const loadAndPaintPosts = async () => {
+        const listEl = document.getElementById("home-post-list");
+        if (!listEl) return;
+        try {
+          const posts = await api.getPosts({
+            neighborhood_id: state.homeFilter.scope === "mine" ? user.neighborhood_id : null,
+            status: state.homeFilter.status,
+            q: state.homeFilter.q,
+            user_id: user.user_id,
+          });
+
+          if (posts.length === 0) {
+            listEl.innerHTML = `
+              <div class="flex-1 flex flex-col items-center justify-center py-16 text-center">
+                <div class="w-12 h-12 rounded-[14px] bg-surface-muted flex items-center justify-center text-muted mb-3">
+                  <svg class="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+                    <circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/>
+                  </svg>
+                </div>
+                <p class="text-[15px] font-bold text-ink">등록된 물건이 아직 없어요</p>
+                <p class="mt-1 text-[12px] text-muted">오른쪽 아래 '판매하기' 버튼으로 첫 글을 올려보세요.</p>
+              </div>
+            `;
+            return;
+          }
+
+          listEl.innerHTML = posts
+            .map(
+              (post) => `
+              <article
+                data-open-post="${post.post_id}"
+                class="cursor-pointer rounded-[14px] border border-border bg-white p-3 flex items-stretch gap-3.5 hover:border-primary/50 active:scale-[0.99] transition-all"
+              >
+                <div class="w-[96px] h-[96px] rounded-[12px] overflow-hidden flex-none border border-border/60">
+                  ${renderImageBox(post.thumbnail, post.post_title)}
+                </div>
+                <div class="flex-1 min-w-0 flex flex-col justify-between py-0.5">
+                  <div>
+                    <h3 class="text-[14px] font-medium text-ink leading-[20.3px] line-clamp-2">${escapeHtml(post.post_title)}</h3>
+                    <p class="mt-1 text-[11px] text-muted leading-[15.95px]">
+                      ${escapeHtml(post.neighborhood_name)} · ${formatRelativeTime(post.post_created)}
+                    </p>
+                  </div>
+                  <div class="flex items-end justify-between gap-2 mt-2">
+                    <div class="flex items-center gap-1.5 flex-wrap">
+                      ${post.status !== "판매중" ? renderStatusBadge(post.status) : ""}
+                      <span class="text-[16px] font-bold leading-[22px] ${
+                        post.status === "거래완료" ? "text-muted" : "text-ink"
+                      }">${formatPrice(post.price)}</span>
+                    </div>
+                    <div class="flex items-center gap-2 text-[11px] text-muted flex-none">
+                      <span class="inline-flex items-center gap-0.5">
+                        <svg class="w-3.5 h-3.5 ${
+                          post.is_wished ? "fill-primary text-primary" : "text-icon-inactive"
+                        }" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                          <path d="M12 20.5S4 15.2 4 9.3C4 6.5 6.2 4.5 8.8 4.5c1.5 0 2.6.8 3.2 1.8.6-1 1.7-1.8 3.2-1.8 2.6 0 4.8 2 4.8 4.8 0 5.9-8 11.2-8 11.2z"/>
+                        </svg>
+                        ${post.wish_count ?? 0}
+                      </span>
+                      <span class="inline-flex items-center gap-0.5">
+                        <svg class="w-3.5 h-3.5 text-icon-inactive" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                          <path d="M4 5.5h16a1 1 0 011 1v9a1 1 0 01-1 1H9l-4 3v-3H4a1 1 0 01-1-1v-9a1 1 0 011-1z"/>
+                        </svg>
+                        ${post.chat_count ?? 0}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </article>
+            `
+            )
+            .join("");
+
+          listEl.querySelectorAll("[data-open-post]").forEach((card) => {
+            card.addEventListener("click", () =>
+              navigate("detail", { postId: Number(card.dataset.openPost) })
+            );
+          });
+        } catch (err) {
+          listEl.innerHTML = `
+            <div class="py-16 text-center flex flex-col items-center gap-2">
+              <p class="text-[14px] font-bold text-[#B91C1C]">목록을 불러오지 못했어요</p>
+              <p class="text-[12px] text-muted">${escapeHtml(err.message)}</p>
+              <button type="button" id="retry-home-btn" class="mt-2 h-[36px] px-4 rounded-[10px] bg-primary-soft text-primary text-[12px] font-bold">다시 시도</button>
+            </div>
+          `;
+          document.getElementById("retry-home-btn")?.addEventListener("click", loadAndPaintPosts);
+        }
+      };
+
+      // Town dropdown modal (filter mine vs all, or go to 02 동네 인증)
+      document.getElementById("home-town-trigger").addEventListener("click", () => {
+        openModal(`
+          <div class="w-full max-w-[390px] bg-white rounded-t-[20px] p-5 flex flex-col gap-2.5 shadow-2xl">
+            <h3 class="text-[16px] font-bold text-ink mb-1">동네 범위 선택</h3>
+            <button type="button" id="scope-mine" class="w-full h-[48px] px-4 rounded-[12px] flex items-center justify-between text-[14px] ${
+              state.homeFilter.scope === "mine"
+                ? "bg-primary-soft text-primary font-bold"
+                : "bg-surface-muted text-ink font-medium"
+            }">
+              <span>${escapeHtml(user.neighborhood_name || "내 동네")} 매물만 보기</span>
+              <span>${state.homeFilter.scope === "mine" ? "✓" : ""}</span>
+            </button>
+            <button type="button" id="scope-all" class="w-full h-[48px] px-4 rounded-[12px] flex items-center justify-between text-[14px] ${
+              state.homeFilter.scope === "all"
+                ? "bg-primary-soft text-primary font-bold"
+                : "bg-surface-muted text-ink font-medium"
+            }">
+              <span>전체 동네 매물 보기</span>
+              <span>${state.homeFilter.scope === "all" ? "✓" : ""}</span>
+            </button>
+            <button type="button" id="scope-reverify" class="mt-1 w-full h-[48px] rounded-[12px] border border-border text-[14px] font-bold text-primary hover:bg-primary-soft">
+              동네 인증 변경하기
+            </button>
+          </div>
+        `);
+
+        document.getElementById("scope-mine").onclick = () => {
+          state.homeFilter.scope = "mine";
+          closeModal();
+          renderHomeScreen(root);
+        };
+        document.getElementById("scope-all").onclick = () => {
+          state.homeFilter.scope = "all";
+          closeModal();
+          renderHomeScreen(root);
+        };
+        document.getElementById("scope-reverify").onclick = () => {
+          closeModal();
+          navigate("verify");
+        };
+      });
+
+      const searchInput = document.getElementById("home-search-input");
+      const clearBtn = document.getElementById("home-search-clear");
+      searchInput.addEventListener("input", (e) => {
+        state.homeFilter.q = e.target.value;
+        clearBtn.classList.toggle("hidden", !state.homeFilter.q);
+        clearTimeout(searchDebounceTimer);
+        searchDebounceTimer = setTimeout(() => loadAndPaintPosts(), 260);
+      });
+
+      clearBtn.addEventListener("click", () => {
+        state.homeFilter.q = "";
+        searchInput.value = "";
+        clearBtn.classList.add("hidden");
+        loadAndPaintPosts();
+      });
+
+      root.querySelectorAll("[data-home-status]").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          state.homeFilter.status = btn.dataset.homeStatus;
+          root.querySelectorAll("[data-home-status]").forEach((b) => {
+            const active = b.dataset.homeStatus === state.homeFilter.status;
+            b.className = `flex-none h-[34px] px-3.5 rounded-full text-[12px] transition-all ${
+              active
+                ? "bg-primary text-white font-bold"
+                : "bg-surface-muted text-ink font-normal hover:bg-primary-soft hover:text-primary"
+            }`;
+          });
+          loadAndPaintPosts();
+        });
+      });
+
+      document.getElementById("fab-sell-btn").addEventListener("click", () => {
+        if (!user.neighborhood_id) {
+          showToast("판매 글을 올리려면 먼저 동네 인증이 필요해요.", "error");
+          navigate("verify");
+          return;
+        }
+        navigate("create");
+      });
+
+      await loadAndPaintPosts();
+    }
+
+    /**
+     * [04] 판매 글 등록
+     */
+    function renderCreateScreen(root) {
+      const user = state.currentUser;
+      const draft = state.draftPost;
+      const nbName = user.neighborhood_name || "우리 동네";
+      const regionInfo = user.region_info || "동네 인증이 필요합니다";
+
+      root.innerHTML = `
+        <div class="flex-1 flex flex-col min-h-0 bg-white">
+          <header class="flex-none h-[56px] px-4 flex items-center justify-between border-b border-border/70">
+            <div class="flex items-center gap-2.5">
+              <button type="button" id="create-back-btn" aria-label="뒤로가기" class="p-1.5 -ml-1.5 rounded-[10px] hover:bg-surface-muted text-ink">
+                <svg class="w-[22px] h-[22px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M15 18l-6-6 6-6"/>
+                </svg>
+              </button>
+              <h2 class="text-[19px] font-bold text-ink leading-[27.55px]">내 물건 팔기</h2>
+            </div>
+            <button type="button" id="save-draft-btn" class="text-[12px] font-bold text-primary hover:text-primary-hover px-2 py-1">
+              임시저장
+            </button>
+          </header>
+
+          <form id="create-post-form" class="flex-1 overflow-y-auto px-[18px] pt-4 pb-6 flex flex-col gap-5">
+            <!-- 상품 사진 (Canvas Resize -> Base64 JPEG) -->
+            <div class="flex flex-col gap-2.5">
+              <div class="flex items-center justify-between">
+                <span class="text-[13px] font-bold text-ink leading-[18.85px]">상품 사진</span>
+                <span class="text-[12px] text-muted">${draft.images.length} / 5</span>
+              </div>
+
+              <div class="flex items-center gap-2.5 overflow-x-auto no-scrollbar pb-1">
+                <label class="cursor-pointer w-[78px] h-[78px] rounded-[12px] bg-surface-muted border border-dashed border-input-border hover:border-primary flex flex-col items-center justify-center gap-1 flex-none text-muted transition-colors">
+                  <svg class="w-[22px] h-[22px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z"/>
+                    <circle cx="12" cy="13" r="4"/>
+                  </svg>
+                  <span class="text-[11px] text-muted">사진 추가</span>
+                  <input id="post-photo-input" type="file" accept="image/*" multiple class="hidden" />
+                </label>
+
+                ${draft.images
+                  .map(
+                    (url, idx) => `
+                  <div class="relative w-[78px] h-[78px] rounded-[12px] overflow-hidden border border-border flex-none">
+                    ${renderImageBox(url, `상품 사진 ${idx + 1}`)}
+                    ${
+                      idx === 0
+                        ? `<div class="absolute inset-x-0 bottom-0 h-[20px] bg-primary text-white text-[10px] font-bold flex items-center justify-center">대표</div>`
+                        : ""
+                    }
+                    <button
+                      type="button"
+                      data-remove-photo="${idx}"
+                      aria-label="사진 삭제"
+                      class="absolute top-1 right-1 w-5 h-5 rounded-full bg-ink/75 text-white text-[11px] flex items-center justify-center"
+                    >×</button>
+                  </div>
+                `
+                  )
+                  .join("")}
+              </div>
+            </div>
+
+            <!-- 제목 -->
+            <div class="flex flex-col gap-1.5">
+              <label for="create-title" class="text-[13px] font-bold text-ink">제목</label>
+              <input
+                id="create-title"
+                type="text"
+                required
+                maxlength="50"
+                value="${escapeHtml(draft.title)}"
+                placeholder="상품 제목을 입력해 주세요"
+                class="w-full h-[50px] px-3.5 rounded-[12px] border border-input-border text-[14px] text-ink placeholder:text-muted/70 focus:outline-none focus:border-primary"
+              />
+            </div>
+
+            <!-- 가격 -->
+            <div class="flex flex-col gap-1.5">
+              <label for="create-price" class="text-[13px] font-bold text-ink">가격</label>
+              <div class="h-[50px] px-3.5 rounded-[12px] border border-input-border focus-within:border-primary flex items-center bg-white">
+                <input
+                  id="create-price"
+                  type="number"
+                  min="0"
+                  step="100"
+                  required
+                  value="${escapeHtml(draft.price)}"
+                  placeholder="120000"
+                  class="flex-1 text-[14px] text-ink placeholder:text-muted/70 focus:outline-none"
+                />
+                <span class="text-[14px] text-muted ml-2">원</span>
+              </div>
+            </div>
+
+            <!-- 설명 -->
+            <div class="flex flex-col gap-1.5">
+              <label for="create-desc" class="text-[13px] font-bold text-ink">설명</label>
+              <div class="rounded-[12px] border border-input-border focus-within:border-primary p-3.5 bg-white flex flex-col">
+                <textarea
+                  id="create-desc"
+                  required
+                  maxlength="2000"
+                  placeholder="구매 시기, 사용감, 거래 희망 장소 등을 자세히 적어주세요."
+                  class="w-full h-[126px] resize-none text-[14px] leading-[20.3px] text-ink placeholder:text-muted/70 focus:outline-none"
+                >${escapeHtml(draft.description)}</textarea>
+                <div class="text-right text-[11px] text-muted mt-1">
+                  <span id="create-desc-len">${draft.description.length.toLocaleString("ko-KR")}</span> / 2,000
+                </div>
+              </div>
+            </div>
+
+            <!-- 거래 동네 -->
+            <div class="p-3.5 rounded-[14px] bg-primary-soft flex items-center gap-3">
+              <svg class="w-[22px] h-[22px] text-primary flex-none" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M12 21s-7-5.5-7-11a7 7 0 1114 0c0 5.5-7 11-7 11z"/>
+                <circle cx="12" cy="10" r="2.5"/>
+              </svg>
+              <div class="flex flex-col">
+                <span class="text-[12px] text-muted">거래 동네</span>
+                <span class="text-[14px] font-bold text-primary">${escapeHtml(regionInfo)}</span>
+              </div>
+            </div>
+
+            <div class="mt-auto pt-2">
+              <button
+                type="submit"
+                id="create-submit-btn"
+                class="w-full h-[52px] rounded-[14px] bg-primary hover:bg-primary-hover active:scale-[0.99] text-white text-[16px] font-bold transition-all disabled:opacity-60"
+              >
+                ${escapeHtml(nbName)} 이웃에게 올리기
+              </button>
+            </div>
+          </form>
+        </div>
+      `;
+
+      const titleEl = document.getElementById("create-title");
+      const priceEl = document.getElementById("create-price");
+      const descEl = document.getElementById("create-desc");
+
+      const syncDraft = () => {
+        state.draftPost.title = titleEl.value;
+        state.draftPost.price = priceEl.value;
+        state.draftPost.description = descEl.value;
+      };
+
+      titleEl.addEventListener("input", syncDraft);
+      priceEl.addEventListener("input", syncDraft);
+      descEl.addEventListener("input", () => {
+        syncDraft();
+        document.getElementById("create-desc-len").textContent =
+          descEl.value.length.toLocaleString("ko-KR");
+      });
+
+      document.getElementById("create-back-btn").addEventListener("click", () => navigate("home"));
+
+      document.getElementById("save-draft-btn").addEventListener("click", () => {
+        syncDraft();
+        try {
+          localStorage.setItem(DRAFT_KEY, JSON.stringify(state.draftPost));
+          showToast("작성 중인 글이 임시저장되었어요.");
+        } catch {
+          localStorage.setItem(DRAFT_KEY, JSON.stringify({ ...state.draftPost, images: [] }));
+          showToast("사진 용량이 커서 글 내용만 임시저장했어요.");
+        }
+      });
+
+      document.getElementById("post-photo-input").addEventListener("change", async (e) => {
+        syncDraft();
+        const files = Array.from(e.target.files || []);
+        const remain = 5 - state.draftPost.images.length;
+        if (remain <= 0) {
+          showToast("사진은 최대 5장까지 등록할 수 있어요.", "error");
+          return;
+        }
+        const toProcess = files.slice(0, remain);
+        try {
+          for (const file of toProcess) {
+            const compressed = await compressImageToDataUrl(file, 640, 0.75);
+            state.draftPost.images.push(compressed);
+          }
+          renderCreateScreen(root);
+        } catch (err) {
+          showToast(err.message || "사진 처리 중 오류가 발생했어요.", "error");
+        }
+      });
+
+      root.querySelectorAll("[data-remove-photo]").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          syncDraft();
+          state.draftPost.images.splice(Number(btn.dataset.removePhoto), 1);
+          renderCreateScreen(root);
+        });
+      });
+
+      document.getElementById("create-post-form").addEventListener("submit", async (e) => {
+        e.preventDefault();
+        syncDraft();
+        const submitBtn = document.getElementById("create-submit-btn");
+        submitBtn.disabled = true;
+        submitBtn.textContent = "등록 중...";
+        try {
+          await api.createPost({
+            user_id: user.user_id,
+            neighborhood_id: user.neighborhood_id,
+            post_title: state.draftPost.title,
+            price: Number(state.draftPost.price),
+            description: state.draftPost.description,
+            images: [...state.draftPost.images],
+          });
+          state.draftPost = { title: "", price: "", description: "", images: [] };
+          localStorage.removeItem(DRAFT_KEY);
+          state.homeFilter.status = "전체";
+          state.homeFilter.q = "";
+          showToast("판매 글이 등록되었어요!");
+          navigate("home");
+        } catch (err) {
+          showToast(err.message, "error");
+          submitBtn.disabled = false;
+          submitBtn.textContent = `${nbName} 이웃에게 올리기`;
+        }
+      });
+    }
+
+    /**
+     * [05] 상품 상세
+     */
+    async function renderDetailScreen(root) {
+      root.innerHTML = `
+        <div class="flex-1 flex items-center justify-center bg-white text-[13px] text-muted">
+          상품 정보를 불러오는 중...
+        </div>
+      `;
+
+      let post;
+      try {
+        post = await api.getPostDetail(state.activePostId, state.currentUser.user_id);
+      } catch (err) {
+        showToast(err.message, "error");
+        navigate("home");
+        return;
+      }
+
+      const isSeller = post.user_id === state.currentUser.user_id;
+      const images = post.images && post.images.length > 0 ? post.images : [null];
+      let imgIdx = 0;
+
+      const paintImageViewer = () => {
+        const viewer = document.getElementById("detail-img-viewer");
+        if (!viewer) return;
+        viewer.innerHTML = `
+          ${renderImageBox(images[imgIdx], post.post_title)}
+          ${
+            images.length > 1
+              ? `
+            <button type="button" id="img-prev-btn" aria-label="이전 사진" class="absolute left-3 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-white/85 text-ink flex items-center justify-center shadow-sm">‹</button>
+            <button type="button" id="img-next-btn" aria-label="다음 사진" class="absolute right-3 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-white/85 text-ink flex items-center justify-center shadow-sm">›</button>
+          `
+              : ""
+          }
+          <div class="absolute bottom-3.5 right-4 h-[23px] px-2.5 rounded-[12px] bg-white/95 text-ink text-[11px] font-medium flex items-center justify-center shadow-sm">
+            ${imgIdx + 1} / ${images.length}
+          </div>
+        `;
+
+        document.getElementById("img-prev-btn")?.addEventListener("click", () => {
+          imgIdx = (imgIdx - 1 + images.length) % images.length;
+          paintImageViewer();
+        });
+        document.getElementById("img-next-btn")?.addEventListener("click", () => {
+          imgIdx = (imgIdx + 1) % images.length;
+          paintImageViewer();
+        });
+      };
+
+      root.innerHTML = `
+        <div class="flex-1 flex flex-col min-h-0 bg-white">
+          <header class="flex-none h-[56px] px-4 flex items-center justify-between border-b border-border/70">
+            <div class="flex items-center gap-2.5">
+              <button type="button" id="detail-back-btn" aria-label="뒤로가기" class="p-1.5 -ml-1.5 rounded-[10px] hover:bg-surface-muted text-ink">
+                <svg class="w-[22px] h-[22px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M15 18l-6-6 6-6"/>
+                </svg>
+              </button>
+              <h2 class="text-[19px] font-bold text-ink leading-[27.55px]">상품 상세</h2>
+            </div>
+            ${
+              isSeller
+                ? `
+              <button
+                type="button"
+                id="detail-header-delete-btn"
+                class="h-[32px] px-3 rounded-[9px] bg-danger-soft text-danger border border-danger/20 hover:bg-danger hover:text-white text-[12px] font-bold transition-colors"
+              >삭제</button>
+            `
+                : ""
+            }
+          </header>
+
+          <div class="flex-1 overflow-y-auto pb-6">
+            <!-- 260px Image Carousel -->
+            <div id="detail-img-viewer" class="relative w-full h-[260px] bg-surface-muted overflow-hidden"></div>
+
+            <div class="px-[18px] pt-3.5 flex flex-col">
+              <!-- Seller Row (No fake star rating) -->
+              <div class="pb-3.5 border-b border-border flex items-center justify-between gap-2">
+                <div class="flex flex-col">
+                  <span class="text-[16px] font-bold text-ink leading-[23.2px]">${escapeHtml(post.seller_nickname)}</span>
+                  <span class="text-[12px] text-muted leading-[17.4px] mt-0.5">${escapeHtml(post.neighborhood_name)} · 동네 인증 완료</span>
+                </div>
+                ${
+                  isSeller
+                    ? `<span class="px-2.5 py-1 rounded-full bg-primary-soft text-primary text-[11px] font-bold">내 판매글</span>`
+                    : ""
+                }
+              </div>
+
+              <div class="mt-4 flex items-center gap-2">
+                ${renderStatusBadge(post.status)}
+                <span class="text-[12px] text-muted">${formatRelativeTime(post.post_created)}</span>
+              </div>
+
+              <h1 class="mt-3 text-[20px] font-bold text-ink leading-[29px]">${escapeHtml(post.post_title)}</h1>
+              <p class="mt-3 text-[14px] text-ink leading-[21px] whitespace-pre-line">${escapeHtml(post.description || "")}</p>
+
+              <!-- 거래 동네 카드 -->
+              <div class="mt-6 p-4 rounded-[14px] bg-surface-muted flex items-center gap-3">
+                <svg class="w-[22px] h-[22px] text-primary flex-none" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M12 21s-7-5.5-7-11a7 7 0 1114 0c0 5.5-7 11-7 11z"/>
+                  <circle cx="12" cy="10" r="2.5"/>
+                </svg>
+                <div class="flex flex-col">
+                  <span class="text-[11px] text-muted">거래 동네</span>
+                  <span class="text-[14px] font-bold text-ink mt-0.5">${escapeHtml(post.region_info)}</span>
+                </div>
+              </div>
+
+              <div id="detail-meta-stats" class="mt-5 text-[12px] text-muted">
+                관심 ${post.wish_count ?? 0} · 채팅 ${post.chat_count ?? 0}
+              </div>
+            </div>
+          </div>
+
+          <!-- Fixed Bottom Action Bar -->
+          <div class="flex-none border-t border-border bg-white px-[18px] py-3 flex items-center justify-between gap-3">
+            ${
+              isSeller
+                ? `
+              <div class="flex-1 flex items-center gap-2.5">
+                <select
+                  id="detail-status-select"
+                  aria-label="거래 상태 변경"
+                  class="flex-1 h-[50px] px-3.5 rounded-[13px] border border-input-border bg-surface-muted text-[14px] font-bold text-ink focus:outline-none focus:border-primary"
+                >
+                  <option value="판매중" ${post.status === "판매중" ? "selected" : ""}>판매중</option>
+                  <option value="예약중" ${post.status === "예약중" ? "selected" : ""}>예약중</option>
+                  <option value="거래완료" ${post.status === "거래완료" ? "selected" : ""}>거래완료</option>
+                </select>
+                <button
+                  type="button"
+                  id="detail-bottom-delete-btn"
+                  class="h-[50px] px-5 rounded-[13px] bg-danger-soft text-danger border border-danger/25 hover:bg-danger hover:text-white active:scale-[0.98] text-[15px] font-bold transition-all"
+                >삭제하기</button>
+              </div>
+            `
+                : `
+              <div class="flex items-center gap-3.5">
+                <button type="button" id="detail-wish-btn" aria-label="관심목록 토글" class="p-1.5 -ml-1 rounded-[10px] hover:bg-surface-muted active:scale-90 transition-all">
+                  <svg id="detail-wish-icon" class="w-[22px] h-[22px] ${post.is_wished ? "fill-primary text-primary" : "text-ink"}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9">
+                    <path d="M12 20.5S4 15.2 4 9.3C4 6.5 6.2 4.5 8.8 4.5c1.5 0 2.6.8 3.2 1.8.6-1 1.7-1.8 3.2-1.8 2.6 0 4.8 2 4.8 4.8 0 5.9-8 11.2-8 11.2z"/>
+                  </svg>
+                </button>
+                <div class="flex flex-col">
+                  <span class="text-[19px] font-bold text-ink leading-[26px]">${formatPrice(post.price)}</span>
+                  <span class="text-[11px] text-primary">${escapeHtml(post.neighborhood_name)} 직거래</span>
+                </div>
+              </div>
+              <button type="button" id="detail-start-chat" class="h-[52px] px-5 rounded-[14px] bg-primary hover:bg-primary-hover active:scale-[0.98] text-white text-[15px] font-bold transition-all">
+                채팅으로 거래하기
+              </button>
+            `
+            }
+          </div>
+        </div>
+      `;
+
+      paintImageViewer();
+
+      document.getElementById("detail-back-btn").addEventListener("click", () => {
+        const safePrev = ["home", "wishlist", "my_sales", "my_reservations"].includes(state.prevScreen)
+          ? state.prevScreen
+          : "home";
+        navigate(safePrev);
+      });
+
+      const handleDeleteDetailPost = () => {
+        openDeletePostModal(post, () => {
+          navigate(state.prevScreen === "my_sales" ? "my_sales" : "home");
+        });
+      };
+
+      document.getElementById("detail-header-delete-btn")?.addEventListener("click", handleDeleteDetailPost);
+      document.getElementById("detail-bottom-delete-btn")?.addEventListener("click", handleDeleteDetailPost);
+
+      document.getElementById("detail-status-select")?.addEventListener("change", async (e) => {
+        const nextStatus = e.target.value;
+        try {
+          await api.updatePostStatus(post.post_id, nextStatus);
+          showToast(`거래 상태가 '${nextStatus}'(으)로 변경되었어요.`);
+          renderDetailScreen(root);
+        } catch (err) {
+          showToast(err.message, "error");
+        }
+      });
+
+      document.getElementById("detail-wish-btn")?.addEventListener("click", async () => {
+        try {
+          const res = await api.toggleWishlist({
+            user_id: state.currentUser.user_id,
+            post_id: post.post_id,
+          });
+          post.is_wished = res.wished;
+          post.wish_count = res.wish_count;
+          const icon = document.getElementById("detail-wish-icon");
+          icon.classList.toggle("fill-primary", res.wished);
+          icon.classList.toggle("text-primary", res.wished);
+          icon.classList.toggle("text-ink", !res.wished);
+          document.getElementById("detail-meta-stats").textContent = `관심 ${res.wish_count} · 채팅 ${post.chat_count ?? 0}`;
+          showToast(res.wished ? "관심목록에 담았어요." : "관심목록에서 해제했어요.");
+        } catch (err) {
+          showToast(err.message, "error");
+        }
+      });
+
+      document.getElementById("detail-start-chat")?.addEventListener("click", async () => {
+        try {
+          const res = await api.getOrCreateChatroom({
+            post_id: post.post_id,
+            buyer_id: state.currentUser.user_id,
+          });
+          navigate("chatroom", {
+            chatroomId: res.chatroom_id,
+            partnerId: post.user_id,
+            partnerNickname: post.seller_nickname,
+          });
+        } catch (err) {
+          showToast(err.message, "error");
+        }
+      });
+    }
+
+    /**
+     * [06] 채팅 목록
+     */
+    async function renderChatsScreen(root) {
+      root.innerHTML = `
+        <div class="flex-1 flex flex-col min-h-0 bg-white">
+          <header class="flex-none h-[56px] px-5 flex items-center justify-between">
+            <h1 class="text-[19px] font-bold text-ink">채팅</h1>
+            <button type="button" id="refresh-chats-btn" class="text-[12px] font-bold text-primary hover:underline">새로고침</button>
+          </header>
+          <div id="chats-body" class="flex-1 flex flex-col min-h-0">
+            <div class="py-16 text-center text-[13px] text-muted">채팅 목록을 불러오는 중...</div>
+          </div>
+        </div>
+      `;
+
+      const body = document.getElementById("chats-body");
+      updateChatList = (rooms, error) => {
+        if (!body.isConnected) return;
+        if (rooms) {
+          const scrollTop = body.lastElementChild?.scrollTop || 0;
+          body.innerHTML = `
+            <div class="flex-none px-[18px] pb-3">
+              <p class="text-[14px] text-muted">참여 중인 채팅방 ${rooms.length}</p>
+            </div>
+            <div class="flex-1 overflow-y-auto px-[18px] pb-5 divide-y divide-border">
+              ${
+                rooms.length === 0
+                  ? `
+                  <div class="py-20 text-center flex flex-col items-center">
+                    <p class="text-[15px] font-bold text-ink">참여 중인 채팅방이 없어요</p>
+                    <p class="mt-1 text-[12px] text-muted">마음에 드는 상품에서 '채팅으로 거래하기'를 눌러보세요.</p>
+                  </div>
+                `
+                  : rooms
+                      .map((room) => {
+                        const resStatus = room.latest_reservation?.reservation_status;
+                        const resBadge =
+                          resStatus === "예약대기"
+                            ? `<span class="inline-flex px-2 py-0.5 rounded-[6px] bg-primary-soft text-primary text-[11px] font-bold">예약대기</span>`
+                            : resStatus === "예약확정"
+                            ? `<span class="inline-flex px-2 py-0.5 rounded-[6px] bg-reserved-bg text-reserved-text text-[11px] font-bold">예약확정</span>`
+                            : resStatus === "거래완료"
+                            ? `<span class="inline-flex px-2 py-0.5 rounded-[6px] bg-surface-muted text-muted text-[11px] font-bold">거래완료</span>`
+                            : "";
+                        return `
+                          <div
+                            data-open-room="${room.chatroom_id}"
+                            data-partner-id="${room.partner_id ?? ""}"
+                            data-partner-name="${escapeHtml(room.partner_nickname)}"
+                            class="cursor-pointer py-3.5 flex items-start gap-3.5 hover:bg-surface-muted/50 transition-colors"
+                          >
+                            <div class="w-[64px] h-[64px] rounded-[12px] overflow-hidden flex-none border border-border/70">
+                              ${renderImageBox(room.post?.thumbnail, room.post?.post_title || "상품")}
+                            </div>
+                            <div class="flex-1 min-w-0 flex flex-col">
+                              <div class="flex items-center justify-between gap-2">
+                                <span class="text-[15px] font-bold text-ink truncate">${escapeHtml(room.partner_nickname)}</span>
+                                <span class="text-[10px] text-muted flex-none">${formatChatListTime(room.last_sent_at)}</span>
+                              </div>
+                              <span class="text-[11px] text-muted truncate mt-0.5">${escapeHtml(room.post?.post_title || "")}</span>
+                              <div class="flex items-center gap-2 mt-1">
+                                <p class="text-[13px] text-ink truncate">${escapeHtml((room.last_message || "").replace(/\n/g, " "))}</p>
+                                ${isUnread(room) ? `<span class="flex-none rounded-full bg-danger px-1.5 py-0.5 text-[10px] font-bold text-white">새 메시지</span>` : ""}
+                              </div>
+                              ${resBadge ? `<div class="mt-1.5">${resBadge}</div>` : ""}
+                            </div>
+                            <button type="button" data-delete-room="${room.chatroom_id}" aria-label="${escapeHtml(room.partner_nickname)}님과의 채팅방 삭제" class="flex-none rounded-lg px-2 py-1 text-[11px] font-bold text-danger hover:bg-danger-soft">삭제</button>
+                          </div>
+                        `;
+                      })
+                      .join("")
+              }
+            </div>
+          `;
+
+          body.querySelectorAll("[data-open-room]").forEach((row) => {
+            row.addEventListener("click", () =>
+              navigate("chatroom", {
+                chatroomId: Number(row.dataset.openRoom),
+                partnerId: row.dataset.partnerId ? Number(row.dataset.partnerId) : null,
+                partnerNickname: row.dataset.partnerName,
+              })
+            );
+          });
+          body.lastElementChild.scrollTop = scrollTop;
+          body.querySelectorAll("[data-delete-room]").forEach((button) => {
+            button.addEventListener("click", (event) => {
+              event.stopPropagation();
+              openDeleteChatModal(Number(button.dataset.deleteRoom));
+            });
+          });
+        } else if (!body.querySelector("[data-open-room]")) {
+          body.innerHTML = `
+            <div class="py-16 px-6 text-center">
+              <p class="text-[14px] font-bold text-[#B91C1C]">채팅 목록을 불러오지 못했어요</p>
+              <p class="mt-1 text-[12px] text-muted">${escapeHtml(error.message)}</p>
+            </div>
+          `;
+        }
+      };
+
+      document.getElementById("refresh-chats-btn").addEventListener("click", refreshChats);
+      await refreshChats();
+    }
+
+    function openDeleteChatModal(roomId) {
+      openModal(`
+        <div class="w-full max-w-[390px] rounded-t-[20px] p-5 flex flex-col gap-4 shadow-2xl">
+          <h3 class="text-[17px] font-bold text-ink">채팅방을 삭제할까요?</h3>
+          <p class="text-[13px] text-muted">두 사람의 채팅방과 대화 내용이 삭제됩니다. 삭제한 대화는 복구할 수 없어요.</p>
+          <div class="grid grid-cols-2 gap-2.5">
+            <button type="button" id="cancel-delete-chat" class="h-12 rounded-xl bg-surface-muted text-sm font-bold text-ink">취소</button>
+            <button type="button" id="confirm-delete-chat" class="h-12 rounded-xl bg-danger text-sm font-bold text-white disabled:opacity-60">삭제</button>
+          </div>
+        </div>
+      `);
+      document.getElementById("cancel-delete-chat").onclick = closeModal;
+      const button = document.getElementById("confirm-delete-chat");
+      button.onclick = async () => {
+        button.disabled = true;
+        try {
+          await api.deleteChatroom(roomId, state.currentUser);
+          if (button.isConnected) closeModal();
+          if (state.screen === "chatroom" && state.activeChatroomId === roomId) navigate("chats");
+          refreshChats();
+          showToast("채팅방이 삭제되었어요.");
+        } catch (error) {
+          showToast(error.message, "error");
+          button.disabled = false;
+        }
+      };
+    }
+
+    async function renderChatroomScreen(root) {
+      const roomId = state.activeChatroomId;
+      const userId = state.currentUser.user_id;
+      root.innerHTML = `
+        <div class="flex-1 flex items-center justify-center bg-white text-[13px] text-muted">
+          채팅방에 연결하는 중...
+        </div>
+      `;
+      const loading = root.firstElementChild;
+
+      let roomData;
+      try {
+        roomData = await api.getChatMessages(roomId);
+      } catch (err) {
+        if (!loading.isConnected) return;
+        showToast(err.message, "error");
+        navigate("chats");
+        return;
+      }
+      if (!loading.isConnected) return;
+
+      let post = roomData.post;
+      let latestReservation = roomData.latest_reservation;
+      let messages = roomData.messages || [];
+
+      // Resolve partnerId & partnerNickname reliably
+      if (!state.activePartnerId || !state.activePartnerNickname) {
+        try {
+          const myRooms = await api.getChatrooms(userId);
+          if (!loading.isConnected) return;
+          const matched = myRooms.find((r) => r.chatroom_id === roomId);
+          if (matched) {
+            state.activePartnerId = matched.partner_id;
+            state.activePartnerNickname = matched.partner_nickname;
+          }
+        } catch {
+          // fallback below
+        }
+      }
+      if (!loading.isConnected) return;
+
+      if (!state.activePartnerNickname) {
+        if (post && post.user_id !== state.currentUser.user_id) {
+          state.activePartnerId = post.user_id;
+          state.activePartnerNickname = post.seller_nickname;
+        } else {
+          const otherMsg = messages.find(
+            (m) => m.user_id !== state.currentUser.user_id
+          );
+          if (otherMsg) {
+            state.activePartnerId = otherMsg.user_id;
+            state.activePartnerNickname = otherMsg.sender_nickname;
+          } else {
+            state.activePartnerNickname = "거래 이웃";
+          }
+        }
+      }
+
+      const partnerName = state.activePartnerNickname;
+
+      const buildMessageBubbleHtml = (m) => {
+        const isMine = m.user_id === state.currentUser.user_id;
+        return isMine
+          ? `
+            <div data-msg-id="${m.message_id}" class="flex items-end justify-end gap-1.5">
+              <span class="text-[10px] text-muted mb-1 flex-none">${formatChatTime(m.sent_at)}</span>
+              <div class="max-w-[74%] px-3.5 py-2.5 rounded-[17px] bg-primary text-white text-[14px] leading-[20.3px] whitespace-pre-line break-words">${escapeHtml(m.content)}</div>
+            </div>
+          `
+          : `
+            <div data-msg-id="${m.message_id}" class="flex items-end justify-start gap-1.5">
+              <div class="max-w-[74%] px-3.5 py-2.5 rounded-[17px] bg-surface-muted text-ink text-[14px] leading-[20.3px] whitespace-pre-line break-words">${escapeHtml(m.content)}</div>
+              <span class="text-[10px] text-muted mb-1 flex-none">${formatChatTime(m.sent_at)}</span>
+            </div>
+          `;
+      };
+
+      const buildReservationCardHtml = () => {
+        const res = latestReservation;
+        if (!res) return "";
+        const st = res.reservation_status;
+        const isPending = st === "예약대기";
+        const isConfirmed = st === "예약확정";
+        const isCanceled = st === "예약취소";
+        const isDone = st === "거래완료";
+
+        const headerLabel = isPending
+          ? "거래 약속이 제안되었어요"
+          : isConfirmed
+          ? "거래 약속이 확정되었어요"
+          : isDone
+          ? "거래가 완료되었어요"
+          : "거래 약속이 취소되었어요";
+
+        return `
+          <div class="mt-2 flex flex-col gap-1.5">
+            <div class="rounded-[17px] border ${
+              isCanceled || isDone ? "border-border bg-surface-muted/50" : "border-primary bg-white"
+            } overflow-hidden">
+              <div class="p-4 flex flex-col gap-2">
+                <div class="flex items-center gap-3">
+                  <div class="w-[42px] h-[42px] rounded-[12px] ${
+                    isCanceled || isDone ? "bg-border text-muted" : "bg-primary-soft text-primary"
+                  } flex items-center justify-center flex-none">
+                    <svg class="w-[22px] h-[22px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                      <rect x="3" y="4" width="18" height="18" rx="3"/>
+                      <path d="M16 2v4M8 2v4M3 10h18"/>
+                    </svg>
+                  </div>
+                  <div class="flex flex-col">
+                    <span class="text-[12px] font-bold ${isCanceled || isDone ? "text-muted" : "text-primary"}">${headerLabel}</span>
+                    <span class="text-[17px] font-bold text-ink mt-0.5">${escapeHtml(formatReservationDate(res.reservation_at))}</span>
+                  </div>
+                </div>
+                <span class="text-[13px] text-muted">${escapeHtml(post?.region_info || "")}</span>
+              </div>
+
+              ${
+                isPending
+                  ? `
+                <div class="grid grid-cols-2 border-t border-border">
+                  <button type="button" data-res-btn="예약취소" class="h-[48px] text-[14px] font-medium text-muted hover:bg-surface-muted transition-colors">취소</button>
+                  <button type="button" data-res-btn="예약확정" class="h-[48px] text-[14px] font-bold text-white bg-primary hover:bg-primary-hover transition-colors">약속 확정</button>
+                </div>
+              `
+                  : isConfirmed
+                  ? `
+                <div class="grid grid-cols-2 border-t border-border">
+                  <button type="button" data-res-btn="예약취소" class="h-[46px] text-[13px] font-medium text-muted hover:bg-surface-muted transition-colors">예약 취소</button>
+                  <button type="button" data-res-btn="거래완료" class="h-[46px] text-[13px] font-bold text-primary bg-primary-soft hover:bg-primary/15 transition-colors">거래 완료</button>
+                </div>
+              `
+                  : `
+                <div class="px-4 py-2.5 border-t border-border flex items-center justify-between">
+                  <span class="text-[12px] font-bold ${isDone ? "text-primary" : "text-muted"}">${escapeHtml(st)}</span>
+                  <span class="text-[11px] text-muted">${isCanceled && res.canceled_at ? formatRelativeTime(res.canceled_at) : ""}</span>
+                </div>
+              `
+              }
+            </div>
+            ${
+              isPending
+                ? `<p class="text-center text-[11px] text-muted">확정하면 두 사람의 거래 약속으로 저장돼요.</p>`
+                : ""
+            }
+          </div>
+        `;
+      };
+
+      const statusLabel = () => [post?.neighborhood_name, chatConnectionLabel()].filter(Boolean).join(" · ");
+
+      root.innerHTML = `
+        <div class="flex-1 flex flex-col min-h-0 bg-white">
+          <header class="flex-none h-[56px] px-4 flex items-center justify-between border-b border-border/70">
+            <div class="flex items-center gap-2.5 min-w-0">
+              <button type="button" id="chat-back-btn" aria-label="뒤로가기" class="p-1.5 -ml-1.5 rounded-[10px] hover:bg-surface-muted text-ink">
+                <svg class="w-[22px] h-[22px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M15 18l-6-6 6-6"/>
+                </svg>
+              </button>
+              <div class="flex flex-col min-w-0">
+                <span class="text-[17px] font-bold text-ink leading-tight truncate">${escapeHtml(partnerName)}</span>
+                <span id="chat-ws-subtitle" class="text-[10px] text-muted mt-0.5">${escapeHtml(statusLabel())}</span>
+              </div>
+            </div>
+            <button type="button" id="chat-menu-btn" aria-label="채팅 메뉴" class="p-2 rounded-[10px] hover:bg-surface-muted text-ink">
+              <svg class="w-5 h-5" viewBox="0 0 24 24" fill="currentColor">
+                <circle cx="5" cy="12" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="19" cy="12" r="1.8"/>
+              </svg>
+            </button>
+          </header>
+
+          <!-- Product Summary Bar -->
+          <div class="flex-none px-[18px] py-2.5 bg-white border-b border-border flex items-center justify-between gap-3">
+            <div id="chat-product-link" class="cursor-pointer flex items-center gap-3 min-w-0">
+              <div class="w-[48px] h-[48px] rounded-[12px] overflow-hidden flex-none border border-border">
+                ${renderImageBox(post?.thumbnail, post?.post_title || "상품")}
+              </div>
+              <div class="flex flex-col min-w-0">
+                <div class="flex items-center gap-1.5">
+                  <span id="chat-post-status" class="text-[11px] font-bold flex-none ${
+                    post?.status === "예약중" ? "text-reserved-text" : "text-primary"
+                  }">${escapeHtml(post?.status || "판매중")}</span>
+                  <span class="text-[12px] text-ink truncate">${escapeHtml(post?.post_title || "")}</span>
+                </div>
+                <span class="text-[15px] font-bold text-ink mt-0.5">${formatPrice(post?.price || 0)}</span>
+              </div>
+            </div>
+            <button
+              type="button"
+              id="open-reserve-modal-btn"
+              class="flex-none h-[34px] px-3 rounded-[9px] border border-input-border bg-white text-[12px] font-bold text-ink hover:border-primary hover:text-primary transition-colors"
+            >예약하기</button>
+          </div>
+
+          <!-- Yellow Safety Banner -->
+          <div class="flex-none h-[32px] px-5 bg-warn-bg text-warn-text text-[11px] flex items-center">
+            선입금·외부 링크를 요구하면 신고해 주세요.
+          </div>
+
+          <!-- Scrollable Chat Messages + Reservation Card -->
+          <div id="chat-scroll-area" class="flex-1 overflow-y-auto px-[18px] py-4 flex flex-col gap-3">
+            <div class="flex justify-center">
+              <span id="chat-date" class="px-3 py-1 rounded-full bg-surface-muted text-[11px] text-muted">
+                ${formatChatDateDivider(messages[0]?.sent_at)}
+              </span>
+            </div>
+            <div id="chat-msg-list" class="flex flex-col gap-2.5">
+              ${messages.map(buildMessageBubbleHtml).join("")}
+            </div>
+            <div id="chat-reservation-slot">${buildReservationCardHtml()}</div>
+          </div>
+
+          <!-- Quick Reply Chips -->
+          <div class="flex-none px-3.5 pt-2 pb-1 flex items-center gap-2 overflow-x-auto no-scrollbar bg-white">
+            ${["네, 좋아요", "조금 늦을 것 같아요", "위치 보내기"]
+              .map(
+                (chip) => `
+              <button
+                type="button"
+                data-quick-chip="${chip}"
+                class="flex-none h-[29px] px-3 rounded-[15px] border border-border bg-white text-[11px] text-muted hover:border-primary hover:text-primary transition-colors"
+              >${chip}</button>
+            `
+              )
+              .join("")}
+          </div>
+
+          <!-- Bottom Input Bar -->
+          <form id="chat-form" class="flex-none px-3.5 py-2.5 bg-white flex items-center gap-2 border-t border-border/50">
+            <input
+              id="chat-input"
+              type="text"
+              autocomplete="off"
+              placeholder="메시지 보내기"
+              class="flex-1 h-[42px] px-4 rounded-[21px] bg-surface-muted text-[13px] text-ink placeholder:text-muted focus:outline-none focus:ring-2 focus:ring-primary-soft"
+            />
+            <button
+              type="submit"
+              aria-label="전송"
+              class="w-[40px] h-[40px] rounded-full bg-primary hover:bg-primary-hover active:scale-95 text-white flex items-center justify-center flex-none transition-all"
+            >
+              <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M12 19V5M5 12l7-7 7 7"/>
+              </svg>
+            </button>
+          </form>
+        </div>
+      `;
+
+      const scrollToBottom = () => {
+        const box = document.getElementById("chat-scroll-area");
+        if (box) box.scrollTop = box.scrollHeight;
+      };
+
+      const view = root.firstElementChild;
+      const scroll = view.querySelector("#chat-scroll-area");
+      const messageList = view.querySelector("#chat-msg-list");
+      const reservationSlot = view.querySelector("#chat-reservation-slot");
+      const subtitle = view.querySelector("#chat-ws-subtitle");
+      const postStatus = view.querySelector("#chat-post-status");
+      let reservationBusy = false;
+      let roomRequest = 0;
+
+      const syncRoom = async (event = { type: "refresh" }) => {
+        if (!view.isConnected) return;
+        if (event.chatroom_id && event.chatroom_id !== roomId) return;
+        if (event.type === "reservation" && event.post_id !== post?.post_id) return;
+        if (event.type === "room_deleted") {
+          navigate("chats");
+          if (event.deleted_by !== userId) showToast("채팅방이 삭제되었어요.");
+          return;
+        }
+        subtitle.textContent = statusLabel();
+        const request = ++roomRequest;
+        try {
+          const fresh = await api.getChatMessages(roomId);
+          if (!view.isConnected || request !== roomRequest) return;
+          const nearBottom = scroll.scrollHeight - scroll.scrollTop - scroll.clientHeight < 48;
+          const nextMessages = fresh.messages || [];
+          const messagesChanged = messages.length !== nextMessages.length ||
+            messages.some((message, index) => message.message_id !== nextMessages[index]?.message_id);
+          if (messagesChanged) {
+            messages = nextMessages;
+            messageList.innerHTML = messages.map(buildMessageBubbleHtml).join("");
+            view.querySelector("#chat-date").textContent = formatChatDateDivider(messages[0]?.sent_at);
+          }
+          const reservationChanged = JSON.stringify(latestReservation) !== JSON.stringify(fresh.latest_reservation);
+          post = fresh.post;
+          latestReservation = fresh.latest_reservation;
+          if (reservationChanged) reservationSlot.innerHTML = buildReservationCardHtml();
+          postStatus.textContent = post?.status || "판매중";
+          postStatus.classList.toggle("text-reserved-text", post?.status === "예약중");
+          postStatus.classList.toggle("text-primary", post?.status !== "예약중");
+          if ((messagesChanged && nearBottom) || reservationChanged) scrollToBottom();
+          if (!document.hidden) markChatRead(roomId, messages);
+        } catch (error) {
+          if (!view.isConnected || request !== roomRequest) return;
+          if (error.status === 404) {
+            navigate("chats");
+            showToast(error.message);
+          } else if (event.type === "manual") {
+            showToast(error.message, "error");
+          }
+        }
+      };
+
+      reservationSlot.addEventListener("click", async (event) => {
+        const button = event.target.closest("[data-res-btn]");
+        if (!button || !latestReservation || reservationBusy) return;
+        reservationBusy = true;
+        button.disabled = true;
+        try {
+          const result = await api.updateReservation(latestReservation.reservation_id, button.dataset.resBtn);
+          await syncRoom();
+          if (view.isConnected) showToast(result.message);
+        } catch (error) {
+          if (view.isConnected) showToast(error.message, "error");
+        } finally {
+          reservationBusy = false;
+          button.disabled = false;
+        }
+      });
+
+      syncOpenChat = syncRoom;
+      if (!document.hidden) markChatRead(roomId, messages);
+      scrollToBottom();
+      syncRoom();
+
+      const sendMessageText = async (rawText) => {
+        const content = rawText.trim();
+        if (!content) return true;
+        try {
+          await api.sendChatMessage(roomId, { user_id: userId, content });
+          syncRoom();
+          refreshChats();
+          return true;
+        } catch (error) {
+          if (view.isConnected) showToast(error.message, "error");
+          return false;
+        }
+      };
+
+      document.getElementById("chat-back-btn").addEventListener("click", () => navigate("chats"));
+      document.getElementById("chat-product-link").addEventListener("click", () => {
+        if (post) navigate("detail", { postId: post.post_id });
+      });
+
+      document.getElementById("chat-form").addEventListener("submit", async (e) => {
+        e.preventDefault();
+        const input = document.getElementById("chat-input");
+        const button = e.currentTarget.querySelector('button[type="submit"]');
+        if (button.disabled) return;
+        const text = input.value;
+        input.value = "";
+        button.disabled = true;
+        if (!(await sendMessageText(text)) && !input.value) input.value = text;
+        button.disabled = false;
+      });
+
+      root.querySelectorAll("[data-quick-chip]").forEach((btn) => {
+        btn.addEventListener("click", () => sendMessageText(btn.dataset.quickChip));
+      });
+
+      // Open Reservation Bottom Sheet Modal
+      document.getElementById("open-reserve-modal-btn").addEventListener("click", () => {
+        const defaultDate = new Date();
+        const yyyy = defaultDate.getFullYear();
+        const mm = String(defaultDate.getMonth() + 1).padStart(2, "0");
+        const dd = String(defaultDate.getDate()).padStart(2, "0");
+        const todayStr = `${yyyy}-${mm}-${dd}`;
+
+        openModal(`
+          <div class="w-full max-w-[390px] bg-white rounded-t-[20px] p-5 flex flex-col gap-4 shadow-2xl">
+            <div class="flex items-center justify-between">
+              <h3 class="text-[17px] font-bold text-ink">거래 약속 제안하기</h3>
+              <button type="button" id="close-res-modal" class="text-muted p-1 text-[16px]">✕</button>
+            </div>
+            <div class="flex flex-col gap-3">
+              <div class="flex flex-col gap-1.5">
+                <label for="res-date-input" class="text-[12px] font-bold text-muted">날짜</label>
+                <input
+                  id="res-date-input"
+                  type="date"
+                  value="${todayStr}"
+                  class="w-full h-[46px] px-3.5 rounded-[12px] border border-input-border text-[14px] text-ink focus:outline-none focus:border-primary"
+                />
+              </div>
+              <div class="flex flex-col gap-1.5">
+                <label for="res-time-input" class="text-[12px] font-bold text-muted">시간</label>
+                <input
+                  id="res-time-input"
+                  type="time"
+                  value="19:00"
+                  class="w-full h-[46px] px-3.5 rounded-[12px] border border-input-border text-[14px] text-ink focus:outline-none focus:border-primary"
+                />
+              </div>
+              <div class="p-3 rounded-[12px] bg-surface-muted text-[12px] text-muted">
+                거래 동네: <strong class="text-ink">${escapeHtml(post?.region_info || "")}</strong>
+              </div>
+            </div>
+            <button type="button" id="submit-reservation-btn" class="w-full h-[52px] rounded-[14px] bg-primary hover:bg-primary-hover text-white text-[15px] font-bold">
+              약속 제안 보내기
+            </button>
+          </div>
+        `);
+
+        document.getElementById("close-res-modal").onclick = closeModal;
+        const submit = document.getElementById("submit-reservation-btn");
+        submit.onclick = async () => {
+          const dateVal = document.getElementById("res-date-input").value || todayStr;
+          const timeVal = document.getElementById("res-time-input").value || "19:00";
+          const localDateTime = new Date(`${dateVal}T${timeVal}:00`);
+          if (Number.isNaN(localDateTime.getTime())) {
+            showToast("약속 날짜와 시간을 확인해 주세요.", "error");
+            return;
+          }
+          if (!post || !roomData.buyer_id) {
+            showToast("이 채팅방의 거래 정보를 찾을 수 없어요.", "error");
+            return;
+          }
+
+          submit.disabled = true;
+          try {
+            await api.createReservation({
+              post_id: post.post_id,
+              user_id: roomData.buyer_id,
+              reservation_at: localDateTime.toISOString(),
+            });
+            if (submit.isConnected) closeModal();
+            syncRoom();
+            if (view.isConnected) showToast("거래 약속을 제안했어요!");
+          } catch (err) {
+            if (submit.isConnected) showToast(err.message, "error");
+          } finally {
+            submit.disabled = false;
+          }
+        };
+      });
+
+      // Chat More Menu
+      document.getElementById("chat-menu-btn").addEventListener("click", () => {
+        openModal(`
+          <div class="w-full max-w-[390px] bg-white rounded-t-[20px] p-4 flex flex-col gap-2 shadow-2xl">
+            <button type="button" id="menu-refresh-chat" class="w-full h-[46px] rounded-[12px] text-[14px] font-medium text-ink hover:bg-surface-muted">대화·약속 새로고침</button>
+            <button type="button" id="menu-open-post" class="w-full h-[46px] rounded-[12px] text-[14px] font-medium text-ink hover:bg-surface-muted">상품 상세 보기</button>
+            <button type="button" id="menu-delete-chat" class="w-full h-[46px] rounded-[12px] text-[14px] font-bold text-danger hover:bg-danger-soft">채팅방 삭제</button>
+            <button type="button" id="menu-close-sheet" class="w-full h-[46px] rounded-[12px] text-[14px] font-bold text-muted bg-surface-muted">닫기</button>
+          </div>
+        `);
+        document.getElementById("menu-refresh-chat").onclick = () => {
+          closeModal();
+          syncRoom({ type: "manual" });
+        };
+        document.getElementById("menu-open-post").onclick = () => {
+          closeModal();
+          if (post) navigate("detail", { postId: post.post_id });
+        };
+        document.getElementById("menu-close-sheet").onclick = closeModal;
+        document.getElementById("menu-delete-chat").onclick = () => openDeleteChatModal(roomId);
+      });
+    }
+
+    /**
+     * [08] 관심목록
+     */
+    async function renderWishlistScreen(root) {
+      root.innerHTML = `
+        <div class="flex-1 flex flex-col min-h-0 bg-white">
+          <header class="flex-none h-[56px] px-4 flex items-center justify-between">
+            <div class="flex items-center gap-2.5">
+              <button type="button" id="wish-back-btn" aria-label="뒤로가기" class="p-1.5 -ml-1.5 rounded-[10px] hover:bg-surface-muted text-ink">
+                <svg class="w-[22px] h-[22px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M15 18l-6-6 6-6"/>
+                </svg>
+              </button>
+              <h2 class="text-[19px] font-bold text-ink">관심목록</h2>
+            </div>
+            <button type="button" id="wish-edit-btn" class="text-[12px] px-2 py-1 ${
+              state.wishlistEditMode ? "font-bold text-primary" : "font-normal text-muted"
+            }">${state.wishlistEditMode ? "완료" : "편집"}</button>
+          </header>
+          <div id="wishlist-body" class="flex-1 flex flex-col min-h-0">
+            <div class="py-16 text-center text-[13px] text-muted">관심목록을 불러오는 중...</div>
+          </div>
+        </div>
+      `;
+
+      document.getElementById("wish-back-btn").addEventListener("click", () => navigate("home"));
+
+      let allPosts = [];
+      try {
+        allPosts = await api.getWishlist(state.currentUser.user_id);
+      } catch (err) {
+        document.getElementById("wishlist-body").innerHTML = `
+          <div class="py-16 px-6 text-center">
+            <p class="text-[14px] font-bold text-[#B91C1C]">관심목록을 불러오지 못했어요</p>
+            <p class="mt-1 text-[12px] text-muted">${escapeHtml(err.message)}</p>
+          </div>
+        `;
+        return;
+      }
+
+      const paintWishlist = () => {
+        const body = document.getElementById("wishlist-body");
+        if (!body) return;
+        const counts = {
+          전체: allPosts.length,
+          판매중: allPosts.filter((p) => p.status === "판매중").length,
+          예약중: allPosts.filter((p) => p.status === "예약중").length,
+          거래완료: allPosts.filter((p) => p.status === "거래완료").length,
+        };
+        const visible =
+          state.wishlistFilter === "전체"
+            ? allPosts
+            : allPosts.filter((p) => p.status === state.wishlistFilter);
+
+        body.innerHTML = `
+          <div class="flex-none px-[18px] pb-3">
+            <h1 class="text-[22px] font-bold text-ink leading-[31.9px]">마음에 둔 물건 ${counts.전체}개</h1>
+            <div class="mt-3.5 flex items-center gap-2 overflow-x-auto no-scrollbar">
+              ${["전체", "판매중", "예약중", "거래완료"]
+                .map((st) => {
+                  const active = state.wishlistFilter === st;
+                  return `
+                    <button
+                      type="button"
+                      data-wish-tab="${st}"
+                      class="flex-none h-[33px] px-3 rounded-[17px] text-[11px] transition-all ${
+                        active ? "bg-ink text-white font-bold" : "bg-surface-muted text-ink font-normal"
+                      }"
+                    >${st} ${counts[st]}</button>
+                  `;
+                })
+                .join("")}
+            </div>
+          </div>
+
+          <div class="flex-1 overflow-y-auto px-[18px] pb-5 divide-y divide-border">
+            ${
+              visible.length === 0
+                ? `
+                <div class="py-20 text-center flex flex-col items-center">
+                  <p class="text-[15px] font-bold text-ink">관심목록에 담긴 물건이 없어요</p>
+                  <p class="mt-1 text-[12px] text-muted">마음에 드는 상품에서 하트를 눌러 저장해 보세요.</p>
+                </div>
+              `
+                : visible
+                    .map(
+                      (post) => `
+                  <div class="py-3.5 flex items-stretch gap-3.5">
+                    <div data-wish-open="${post.post_id}" class="cursor-pointer w-[96px] h-[96px] rounded-[12px] overflow-hidden flex-none border border-border/70">
+                      ${renderImageBox(post.thumbnail, post.post_title)}
+                    </div>
+                    <div class="flex-1 min-w-0 flex flex-col justify-between py-0.5">
+                      <div data-wish-open="${post.post_id}" class="cursor-pointer">
+                        <h3 class="text-[14px] font-medium text-ink leading-[20.3px] line-clamp-2">${escapeHtml(post.post_title)}</h3>
+                        <p class="mt-1 text-[11px] text-muted">${escapeHtml(post.neighborhood_name)} · ${formatRelativeTime(post.post_created)}</p>
+                      </div>
+                      <div class="flex items-center justify-between gap-2 mt-2">
+                        <div class="flex items-center gap-1.5">
+                          ${renderStatusBadge(post.status)}
+                          <span class="text-[16px] font-bold ${post.status === "거래완료" ? "text-muted" : "text-ink"}">${formatPrice(post.price)}</span>
+                        </div>
+                        <button type="button" data-unwish-id="${post.post_id}" aria-label="관심 해제" class="p-1.5 rounded-[8px] hover:bg-primary-soft transition-colors">
+                          ${
+                            state.wishlistEditMode
+                              ? `<span class="px-2 py-1 rounded-[6px] bg-[#FEF2F2] text-[#DC2626] text-[11px] font-bold">삭제</span>`
+                              : `<svg class="w-[18px] h-[18px] fill-primary text-primary" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8">
+                                   <path d="M12 20.5S4 15.2 4 9.3C4 6.5 6.2 4.5 8.8 4.5c1.5 0 2.6.8 3.2 1.8.6-1 1.7-1.8 3.2-1.8 2.6 0 4.8 2 4.8 4.8 0 5.9-8 11.2-8 11.2z"/>
+                                 </svg>`
+                          }
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                `
+                    )
+                    .join("")
+            }
+          </div>
+        `;
+
+        body.querySelectorAll("[data-wish-tab]").forEach((btn) => {
+          btn.addEventListener("click", () => {
+            state.wishlistFilter = btn.dataset.wishTab;
+            paintWishlist();
+          });
+        });
+
+        body.querySelectorAll("[data-wish-open]").forEach((el) => {
+          el.addEventListener("click", () =>
+            navigate("detail", { postId: Number(el.dataset.wishOpen) })
+          );
+        });
+
+        body.querySelectorAll("[data-unwish-id]").forEach((btn) => {
+          btn.addEventListener("click", async () => {
+            const pid = Number(btn.dataset.unwishId);
+            try {
+              await api.toggleWishlist({ user_id: state.currentUser.user_id, post_id: pid });
+              allPosts = allPosts.filter((p) => p.post_id !== pid);
+              showToast("관심목록에서 삭제했어요.");
+              paintWishlist();
+            } catch (err) {
+              showToast(err.message, "error");
+            }
+          });
+        });
+      };
+
+      document.getElementById("wish-edit-btn").addEventListener("click", () => {
+        state.wishlistEditMode = !state.wishlistEditMode;
+        const editBtn = document.getElementById("wish-edit-btn");
+        editBtn.textContent = state.wishlistEditMode ? "완료" : "편집";
+        editBtn.className = `text-[12px] px-2 py-1 ${
+          state.wishlistEditMode ? "font-bold text-primary" : "font-normal text-muted"
+        }`;
+        paintWishlist();
+      });
+
+      paintWishlist();
+    }
+
+    /**
+     * [09] 마이페이지
+     */
+    function renderMypageScreen(root) {
+      const user = state.currentUser;
+
+      root.innerHTML = `
+        <div class="flex-1 flex flex-col min-h-0 bg-white">
+          <header class="flex-none h-[56px] px-5 flex items-center justify-between">
+            <h1 class="text-[19px] font-bold text-ink">마이페이지</h1>
+            ${renderModePill(false)}
+          </header>
+
+          <div class="flex-1 overflow-y-auto px-[18px] pt-2 pb-6 flex flex-col">
+            <!-- Profile Card -->
+            <section class="rounded-[16px] border border-border bg-white p-[18px] flex flex-col">
+              <span class="text-[12px] text-muted">내 프로필</span>
+              <h2 class="mt-2 text-[25px] font-bold text-ink leading-[34px]">${escapeHtml(user.nickname)}</h2>
+              <span class="mt-1 text-[14px] text-muted">${escapeHtml(user.phone_num)}</span>
+
+              <div class="mt-4">
+                <span class="inline-flex items-center h-[28px] px-3.5 rounded-[14px] ${
+                  user.is_verified ? "bg-primary-soft text-primary" : "bg-surface-muted text-muted"
+                } text-[12px] font-bold">
+                  ${user.is_verified && user.neighborhood_name ? `${escapeHtml(user.neighborhood_name)} 인증 완료` : "동네 인증 필요"}
+                </span>
+              </div>
+
+              <button
+                type="button"
+                id="mypage-verify-btn"
+                class="mt-3.5 w-full h-[50px] rounded-[13px] bg-primary hover:bg-primary-hover active:scale-[0.99] text-white text-[15px] font-bold transition-all"
+              >동네 인증하기</button>
+            </section>
+
+            <!-- 나의 거래 -->
+            <h3 class="mt-7 mb-3 text-[18px] font-bold text-ink">나의 거래</h3>
+            <section class="rounded-[16px] border border-border bg-white divide-y divide-border overflow-hidden">
+              ${[
+                { id: "my_sales", label: "판매 내역" },
+                { id: "my_reservations", label: "예약 내역" },
+                { id: "wishlist", label: "관심목록" },
+              ]
+                .map(
+                  (row) => `
+                <button
+                  type="button"
+                  data-my-route="${row.id}"
+                  class="w-full h-[64px] px-[18px] flex items-center justify-between hover:bg-surface-muted/60 active:bg-surface-muted transition-colors"
+                >
+                  <span class="text-[15px] font-medium text-ink">${row.label}</span>
+                  <span class="text-[24px] text-muted leading-none">›</span>
+                </button>
+              `
+                )
+                .join("")}
+            </section>
+
+            <!-- 로그아웃 -->
+            <button
+              type="button"
+              id="mypage-logout-btn"
+              class="mt-6 w-full h-[50px] rounded-[13px] border border-border bg-white hover:bg-surface-muted text-[15px] font-bold text-ink transition-colors"
+            >로그아웃</button>
+          </div>
+        </div>
+      `;
+
+      document.getElementById("mypage-verify-btn").addEventListener("click", () => navigate("verify"));
+      root.querySelectorAll("[data-my-route]").forEach((btn) => {
+        btn.addEventListener("click", () => navigate(btn.dataset.myRoute));
+      });
+
+      document.getElementById("mypage-logout-btn").addEventListener("click", () => {
+        openModal(`
+          <div class="w-full max-w-[390px] bg-white rounded-t-[20px] p-5 flex flex-col gap-4 shadow-2xl">
+            <div class="flex flex-col gap-1">
+              <h3 class="text-[17px] font-bold text-ink">로그아웃 할까요?</h3>
+              <p class="text-[13px] text-muted">다른 계정으로 로그인하거나 브라우저 새 탭을 열어 판매자·구매자 채팅을 테스트할 수 있어요.</p>
+            </div>
+            <div class="grid grid-cols-2 gap-2.5">
+              <button type="button" id="cancel-logout" class="h-[48px] rounded-[12px] bg-surface-muted text-[14px] font-bold text-muted">취소</button>
+              <button type="button" id="confirm-logout" class="h-[48px] rounded-[12px] bg-primary text-[14px] font-bold text-white">로그아웃</button>
+            </div>
+          </div>
+        `);
+        document.getElementById("cancel-logout").onclick = closeModal;
+        document.getElementById("confirm-logout").onclick = () => {
+          closeModal();
+          resetChatUpdates();
+          state.currentUser = null;
+          state.authTab = "login";
+          state.authInlineError = "";
+          saveSessionUser(null);
+          showToast("로그아웃 되었어요.");
+          navigate("auth");
+        };
+      });
+    }
+
+    /**
+     * [09-1] 마이페이지 서브뷰: 판매 내역
+     */
+    async function renderMySalesScreen(root) {
+      root.innerHTML = `
+        <div class="flex-1 flex flex-col min-h-0 bg-white">
+          <header class="flex-none h-[56px] px-4 flex items-center gap-2.5 border-b border-border">
+            <button type="button" id="sales-back-btn" aria-label="뒤로가기" class="p-1.5 -ml-1.5 rounded-[10px] hover:bg-surface-muted text-ink">
+              <svg class="w-[22px] h-[22px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M15 18l-6-6 6-6"/>
+              </svg>
+            </button>
+            <h2 class="text-[19px] font-bold text-ink">판매 내역</h2>
+          </header>
+          <div id="sales-body" class="flex-1 overflow-y-auto px-[18px] py-4 flex flex-col gap-3">
+            <div class="py-16 text-center text-[13px] text-muted">판매 내역을 불러오는 중...</div>
+          </div>
+        </div>
+      `;
+
+      document.getElementById("sales-back-btn").addEventListener("click", () => navigate("mypage"));
+
+      const body = document.getElementById("sales-body");
+      try {
+        const sales = await api.getPosts({
+          seller_id: state.currentUser.user_id,
+          user_id: state.currentUser.user_id,
+        });
+
+        if (sales.length === 0) {
+          body.innerHTML = `
+            <div class="py-20 text-center flex flex-col items-center gap-3">
+              <p class="text-[15px] font-bold text-ink">아직 등록한 판매글이 없어요</p>
+              <button type="button" id="go-create-from-sales" class="h-[44px] px-5 rounded-[12px] bg-primary text-white text-[14px] font-bold">+ 물건 팔기</button>
+            </div>
+          `;
+          document.getElementById("go-create-from-sales")?.addEventListener("click", () => navigate("create"));
+          return;
+        }
+
+        body.innerHTML = sales
+          .map(
+            (post) => `
+            <div class="rounded-[14px] border border-border p-3.5 flex flex-col gap-3">
+              <div class="flex items-stretch gap-3.5">
+                <div data-sale-open="${post.post_id}" class="cursor-pointer w-[82px] h-[82px] rounded-[12px] overflow-hidden flex-none border border-border/70">
+                  ${renderImageBox(post.thumbnail, post.post_title)}
+                </div>
+                <div class="flex-1 min-w-0 flex flex-col justify-between py-0.5">
+                  <div class="flex items-start justify-between gap-2">
+                    <div data-sale-open="${post.post_id}" class="cursor-pointer min-w-0 flex-1">
+                      <h3 class="text-[14px] font-medium text-ink line-clamp-2">${escapeHtml(post.post_title)}</h3>
+                      <p class="mt-1 text-[11px] text-muted">${escapeHtml(post.neighborhood_name)} · ${formatRelativeTime(post.post_created)}</p>
+                    </div>
+                    <button
+                      type="button"
+                      data-sale-delete="${post.post_id}"
+                      class="flex-none h-[28px] px-2.5 rounded-[8px] bg-danger-soft text-danger border border-danger/20 hover:bg-danger hover:text-white text-[11px] font-bold transition-colors"
+                    >삭제</button>
+                  </div>
+                  <div data-sale-open="${post.post_id}" class="cursor-pointer flex items-center gap-1.5 mt-1.5">
+                    ${renderStatusBadge(post.status)}
+                    <span class="text-[15px] font-bold text-ink">${formatPrice(post.price)}</span>
+                  </div>
+                </div>
+              </div>
+              <div class="grid grid-cols-3 gap-1.5 pt-2.5 border-t border-border">
+                ${["판매중", "예약중", "거래완료"]
+                  .map(
+                    (st) => `
+                  <button
+                    type="button"
+                    data-sale-status="${post.post_id}:${st}"
+                    class="h-[34px] rounded-[9px] text-[12px] font-bold transition-colors ${
+                      post.status === st
+                        ? "bg-primary-soft text-primary"
+                        : "bg-surface-muted text-muted hover:text-ink"
+                    }"
+                  >${st}</button>
+                `
+                  )
+                  .join("")}
+              </div>
+            </div>
+          `
+          )
+          .join("");
+
+        body.querySelectorAll("[data-sale-open]").forEach((el) => {
+          el.addEventListener("click", () =>
+            navigate("detail", { postId: Number(el.dataset.saleOpen) })
+          );
+        });
+
+        body.querySelectorAll("[data-sale-delete]").forEach((btn) => {
+          btn.addEventListener("click", () => {
+            const pid = Number(btn.dataset.saleDelete);
+            const target = sales.find((p) => p.post_id === pid);
+            if (!target) return;
+            openDeletePostModal(target, () => renderMySalesScreen(root));
+          });
+        });
+
+        body.querySelectorAll("[data-sale-status]").forEach((btn) => {
+          btn.addEventListener("click", async () => {
+            const [postId, nextStatus] = btn.dataset.saleStatus.split(":");
+            try {
+              await api.updatePostStatus(Number(postId), nextStatus);
+              showToast(`상태가 '${nextStatus}'(으)로 변경되었어요.`);
+              renderMySalesScreen(root);
+            } catch (err) {
+              showToast(err.message, "error");
+            }
+          });
+        });
+      } catch (err) {
+        body.innerHTML = `
+          <div class="py-16 text-center">
+            <p class="text-[14px] font-bold text-[#B91C1C]">판매 내역을 불러오지 못했어요</p>
+            <p class="mt-1 text-[12px] text-muted">${escapeHtml(err.message)}</p>
+          </div>
+        `;
+      }
+    }
+
+    /**
+     * [09-2] 마이페이지 서브뷰: 예약 내역
+     */
+    async function renderMyReservationsScreen(root) {
+      root.innerHTML = `
+        <div class="flex-1 flex flex-col min-h-0 bg-white">
+          <header class="flex-none h-[56px] px-4 flex items-center gap-2.5 border-b border-border">
+            <button type="button" id="res-back-btn" aria-label="뒤로가기" class="p-1.5 -ml-1.5 rounded-[10px] hover:bg-surface-muted text-ink">
+              <svg class="w-[22px] h-[22px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M15 18l-6-6 6-6"/>
+              </svg>
+            </button>
+            <h2 class="text-[19px] font-bold text-ink">예약 내역</h2>
+          </header>
+          <div id="res-body" class="flex-1 overflow-y-auto px-[18px] py-4 flex flex-col gap-3">
+            <div class="py-16 text-center text-[13px] text-muted">예약 내역을 불러오는 중...</div>
+          </div>
+        </div>
+      `;
+
+      document.getElementById("res-back-btn").addEventListener("click", () => navigate("mypage"));
+
+      const body = document.getElementById("res-body");
+      try {
+        const list = await api.getUserReservations(state.currentUser.user_id);
+
+        if (list.length === 0) {
+          body.innerHTML = `
+            <div class="py-20 text-center">
+              <p class="text-[15px] font-bold text-ink">예약된 거래가 없어요</p>
+              <p class="mt-1 text-[12px] text-muted">1:1 채팅에서 거래 약속을 제안하고 확정해 보세요.</p>
+            </div>
+          `;
+          return;
+        }
+
+        body.innerHTML = list
+          .map((r) => {
+            const st = r.reservation_status;
+            const pillClass =
+              st === "예약확정"
+                ? "bg-reserved-bg text-reserved-text"
+                : st === "예약취소"
+                ? "bg-surface-muted text-muted"
+                : "bg-primary-soft text-primary";
+            const post = r.post;
+            return `
+              <div class="rounded-[14px] border border-border p-3.5 flex flex-col gap-3">
+                <div class="flex items-center justify-between gap-2">
+                  <span class="px-2 py-0.5 rounded-[6px] text-[11px] font-bold ${pillClass}">${escapeHtml(st)}</span>
+                  <span class="text-[12px] font-bold text-primary">${escapeHtml(formatReservationDate(r.reservation_at))}</span>
+                </div>
+                ${
+                  post
+                    ? `
+                  <div data-res-open-post="${post.post_id}" class="cursor-pointer flex items-stretch gap-3">
+                    <div class="w-[74px] h-[74px] rounded-[12px] overflow-hidden flex-none border border-border/70">
+                      ${renderImageBox(post.thumbnail, post.post_title)}
+                    </div>
+                    <div class="flex-1 min-w-0 flex flex-col justify-between py-0.5">
+                      <h3 class="text-[14px] font-medium text-ink truncate">${escapeHtml(post.post_title)}</h3>
+                      <p class="text-[11px] text-muted">예약자: ${escapeHtml(r.buyer_nickname)} · ${escapeHtml(post.neighborhood_name)}</p>
+                      <p class="text-[15px] font-bold text-ink">${formatPrice(post.price)}</p>
+                    </div>
+                  </div>
+                `
+                    : ""
+                }
+                ${
+                  st === "예약대기" || st === "예약확정"
+                    ? `
+                  <div class="grid grid-cols-2 gap-2 pt-2.5 border-t border-border">
+                    <button type="button" data-res-act="${r.reservation_id}:예약취소" class="h-[36px] rounded-[10px] bg-surface-muted text-[12px] font-bold text-muted hover:text-ink">
+                      예약 취소
+                    </button>
+                    <button type="button" data-res-act="${r.reservation_id}:${
+                        st === "예약대기" ? "예약확정" : "거래완료"
+                      }" class="h-[36px] rounded-[10px] bg-primary text-[12px] font-bold text-white hover:bg-primary-hover">
+                      ${st === "예약대기" ? "약속 확정" : "거래 완료"}
+                    </button>
+                  </div>
+                `
+                    : ""
+                }
+              </div>
+            `;
+          })
+          .join("");
+
+        body.querySelectorAll("[data-res-open-post]").forEach((el) => {
+          el.addEventListener("click", () =>
+            navigate("detail", { postId: Number(el.dataset.resOpenPost) })
+          );
+        });
+
+        body.querySelectorAll("[data-res-act]").forEach((btn) => {
+          btn.addEventListener("click", async () => {
+            const [resId, nextStatus] = btn.dataset.resAct.split(":");
+            try {
+              const res = await api.updateReservation(Number(resId), nextStatus);
+              showToast(res.message || `${nextStatus} 처리되었어요.`);
+              renderMyReservationsScreen(root);
+            } catch (err) {
+              showToast(err.message, "error");
+            }
+          });
+        });
+      } catch (err) {
+        body.innerHTML = `
+          <div class="py-16 text-center">
+            <p class="text-[14px] font-bold text-[#B91C1C]">예약 내역을 불러오지 못했어요</p>
+            <p class="mt-1 text-[12px] text-muted">${escapeHtml(err.message)}</p>
+          </div>
+        `;
+      }
+    }
+
+    /* =========================================================================
+       9. MAIN ROUTER & BOOTSTRAP
+       ========================================================================= */
+    async function renderApp() {
+      const root = document.getElementById("screen-root");
+      try {
+        if (!state.currentUser && state.screen !== "auth") {
+          state.screen = "auth";
+        }
+        switch (state.screen) {
+          case "auth":
+            renderAuthScreen(root);
+            break;
+          case "verify":
+            await renderVerifyScreen(root);
+            break;
+          case "home":
+            await renderHomeScreen(root);
+            break;
+          case "create":
+            renderCreateScreen(root);
+            break;
+          case "detail":
+            await renderDetailScreen(root);
+            break;
+          case "chats":
+            await renderChatsScreen(root);
+            break;
+          case "chatroom":
+            await renderChatroomScreen(root);
+            break;
+          case "wishlist":
+            await renderWishlistScreen(root);
+            break;
+          case "mypage":
+            renderMypageScreen(root);
+            break;
+          case "my_sales":
+            await renderMySalesScreen(root);
+            break;
+          case "my_reservations":
+            await renderMyReservationsScreen(root);
+            break;
+          default:
+            renderAuthScreen(root);
+        }
+        renderBottomNav();
+      } catch (err) {
+        console.error("Render error:", err);
+        showToast("화면을 불러오는 중 문제가 발생했어요.", "error");
+      }
+    }
+
+    window.addEventListener("DOMContentLoaded", async () => {
+      if (state.currentUser) {
+        // Refresh user profile from real backend if running locally
+        if (!USE_MOCK) {
+          try {
+            const fresh = await api.getUser(state.currentUser.user_id);
+            state.currentUser = { ...fresh, chat_session: state.currentUser.chat_session };
+            saveSessionUser(state.currentUser);
+          } catch {
+            // If DB was reset or user no longer exists, clear stale session
+            state.currentUser = null;
+            saveSessionUser(null);
+          }
+        }
+        state.screen = state.currentUser
+          ? state.currentUser.is_verified
+            ? "home"
+            : "verify"
+          : "auth";
+      } else {
+        state.screen = "auth";
+      }
+      renderApp();
+      pollChatUpdates();
+      setInterval(pollChatUpdates, 4000);
+      window.addEventListener("focus", () => {
+        lastChatSync = 0;
+        pollChatUpdates();
+      });
+    });
+  </script>
+</body>
+</html>
